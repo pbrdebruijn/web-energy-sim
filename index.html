@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home energy simulator</title>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<style>
+:root {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+  --hair: #2c2c2a; --axis: #383835;
+  --solar: #c98500; --home: #3987e5; --ev: #199e70; --batt: #9085e9; --grid: #d95926;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--page); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  display: grid; grid-template-columns: minmax(0, 1fr) 380px; }
+main { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; height: 100vh; }
+#stage { position: relative; overflow: hidden; min-height: 280px; }
+#stage canvas { display: block; }
+.tag { position: absolute; left: 0; top: 0; cursor: pointer; user-select: none; white-space: nowrap; text-align: center;
+  background: rgba(26, 26, 25, .88); border: 1px solid rgba(255, 255, 255, .1); border-bottom: 3px solid var(--c);
+  border-radius: 8px; padding: 4px 9px; font-size: 12px; color: var(--ink2); }
+.tag:hover, .tag:focus-visible { border-color: var(--c); outline: none; }
+.tag.active { box-shadow: 0 0 0 2px var(--c); }
+.tag.off { opacity: .6; }
+.tag b { display: block; color: var(--ink); font-size: 14px; }
+.tag .soc { display: block; height: 4px; margin-top: 3px; border-radius: 2px; background: var(--axis); }
+.tag .soc i { display: block; height: 100%; border-radius: 2px; background: var(--c); }
+#clock { position: absolute; left: 16px; bottom: 16px; z-index: 1; display: flex; gap: 10px; align-items: center;
+  background: rgba(26, 26, 25, .88); border: 1px solid rgba(255, 255, 255, .1); border-radius: 10px; padding: 8px 12px; }
+#clock time { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
+#clock small { color: var(--ink2); white-space: nowrap; line-height: 1.25; }
+button { font: inherit; color: var(--ink); background: var(--axis); border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+button:hover { background: #4a4a46; }
+#charts { background: var(--surface); border-top: 1px solid var(--hair); padding: 10px 14px 6px; position: relative; }
+#legend { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--ink2); font-size: 12px; margin-bottom: 4px; }
+#legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; }
+#chart { display: block; width: 100%; cursor: crosshair; touch-action: none; }
+#chart text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+#chart .title { fill: var(--ink2); }
+#tip { position: absolute; pointer-events: none; background: #0d0d0d; border: 1px solid var(--axis); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px; color: var(--ink2); display: none; z-index: 2; min-width: 170px; }
+#tip b { color: var(--ink); }
+#tip div { display: flex; justify-content: space-between; gap: 14px; }
+#tip i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+#pop { position: absolute; z-index: 3; width: 300px; max-width: calc(100% - 16px); max-height: calc(100% - 16px); overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--axis); border-radius: 10px; padding: 0 14px 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, .5); }
+#pop h2 { border-top: 0; margin-top: 10px; padding-top: 0; }
+.x { margin-left: auto; padding: 2px 8px; }
+h2 label + .x { margin-left: 0; }
+details.more { margin: 10px 0 4px; }
+details.more summary { cursor: pointer; color: var(--ink2); font-size: 13px; }
+details.more summary:hover { color: var(--ink); }
+aside { background: var(--surface); border-left: 1px solid var(--hair); overflow-y: auto; height: 100vh; padding: 16px; }
+h1 { font-size: 16px; margin: 0 0 12px; }
+h2 { font-size: 13px; margin: 18px 0 8px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--ink);
+  display: flex; align-items: center; gap: 8px; }
+h2 i { width: 10px; height: 10px; border-radius: 2px; }
+h2 label { margin-left: auto; font-weight: 400; color: var(--ink2); }
+.hero { font-size: 40px; font-weight: 650; line-height: 1.1; }
+.hero small { display: block; font-size: 14px; font-weight: 400; color: var(--ink2); margin-top: 2px; }
+.sub { color: var(--ink2); margin: 4px 0 10px; }
+.bar { display: flex; gap: 2px; height: 14px; margin: 8px 0 6px; }
+.bar span { border-radius: 3px; min-width: 2px; }
+dl { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; margin: 0; color: var(--ink2); }
+dd { margin: 0; color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; }
+dt i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.tiles div { background: var(--page); border-radius: 8px; padding: 8px 10px; color: var(--ink2); font-size: 12px; }
+.tiles b { display: block; font-size: 18px; color: var(--ink); }
+.row { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; margin: 8px 0; color: var(--ink2); }
+.row output { color: var(--ink); font-variant-numeric: tabular-nums; }
+.row input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--home); margin: 0; }
+.row select { grid-column: 1 / -1; font: inherit; color: var(--ink); background: var(--page); border: 1px solid var(--axis);
+  border-radius: 6px; padding: 5px; }
+.check { display: flex; gap: 8px; margin: 8px 0; color: var(--ink2); }
+.note { color: var(--muted); font-size: 12px; margin: 6px 0; }
+@media (max-width: 900px) {
+  body { display: block; }
+  main { height: auto; }
+  #stage { height: 60vh; }
+  aside { height: auto; border-left: 0; }
+}
+</style>
+</head>
+<body>
+<main>
+  <div id="stage">
+    <div id="clock">
+      <button id="play" aria-label="Pause">❚❚</button>
+      <time id="time">00:00</time>
+      <small id="now"></small>
+      <button id="speed" aria-label="Playback speed">1x</button>
+    </div>
+    <div id="pop" role="dialog" hidden></div>
+  </div>
+  <section id="charts">
+    <div id="legend"></div>
+    <svg id="chart" role="img" aria-label="Price, power and charge level over the day"></svg>
+    <div id="tip"></div>
+  </section>
+</main>
+<aside>
+  <h1>Home energy simulator</h1>
+  <div id="results"></div>
+  <div id="controls"></div>
+  <p class="note">Prices follow the Zonneplan dynamic tariff: hourly day-ahead price plus 21% VAT, €0.02 purchase fee and €0.1108 energy tax per kWh. Fixed delivery and grid operator costs are not included.</p>
+</aside>
+<script type="module" src="main.js"></script>
+</body>
+</html>
