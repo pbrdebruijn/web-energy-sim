@@ -53,10 +53,16 @@ const SENSORS = {
 };
 // The Energy dashboard knows grid, solar and battery; the card config below only adds the car, price and weather
 const ENERGY_PREFS = { energy_sources: [
-  { type: 'grid', stat_energy_from: 'sensor.grid_energy_in', stat_energy_to: 'sensor.grid_energy_out', stat_rate: 'sensor.grid_power' },
+  { type: 'grid', stat_energy_from: 'sensor.grid_energy_in', stat_energy_to: 'sensor.grid_energy_out', stat_cost: 'sensor.grid_cost', stat_rate: 'sensor.grid_power' },
   { type: 'solar', stat_energy_from: 'sensor.solar_energy', stat_rate: 'sensor.solar_power' },
   { type: 'battery', stat_energy_from: 'sensor.battery_energy_out', stat_energy_to: 'sensor.battery_energy_in', stat_rate: 'sensor.battery_power_signed', stat_soc: 'sensor.battery_level' },
 ], device_consumption: [] };
+// kWh per 15 minutes for each meter (and € for the cost), summed by the statistics mock
+const METERS = {
+  'sensor.grid_energy_in': (k) => Math.max(0, r.grid[k]), 'sensor.grid_energy_out': (k) => Math.max(0, -r.grid[k]),
+  'sensor.solar_energy': (k) => r.solar[k], 'sensor.battery_energy_out': (k) => Math.max(0, r.batt[k]),
+  'sensor.battery_energy_in': (k) => Math.max(0, -r.batt[k]), 'sensor.grid_cost': (k) => Math.max(0, r.grid[k]) * r.buy[k],
+};
 const start = new Date(); start.setHours(0, 0, 0, 0);
 const slotNow = () => Math.min(N - 1, Math.floor((Date.now() - start) / (DT * 3600e3)));
 
@@ -69,6 +75,10 @@ const hass = () => {
     states,
     async callWS(msg) {
       if (msg.type === 'energy/get_prefs') return ENERGY_PREFS;
+      if (msg.type === 'recorder/statistic_during_period') {
+        const f = METERS[msg.statistic_id];
+        return { change: f ? Array.from({ length: slotNow() + 1 }, (_, k) => f(k) * DT).reduce((a, b) => a + b, 0) : null };
+      }
       const out = {};
       for (const id of msg.entity_ids) {
         const [f] = SENSORS[id] ?? [() => 'unknown'];

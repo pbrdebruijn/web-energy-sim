@@ -11,6 +11,7 @@ What the card does:
 - The sun moves with the real time and month, the windows light up at night, and the panels glow with the solar output.
 - The scenery follows the season. Snow and a snowman in winter, blossom in spring, birds in summer, falling leaves in autumn and a pumpkin in October. A jogger and a dog run past by day.
 - The car drives off when it is unplugged and parks again when it comes back, if you add a plugged-in sensor.
+- A row of tiles shows today's totals from the Energy dashboard: imported, exported, solar, the share of your use covered without the grid, and today's energy cost when the Energy dashboard tracks it. They are the same meter readings the Energy dashboard uses, refreshed every 5 minutes.
 - Drag across the chart to replay earlier today in the scene. After 15 seconds the card returns to now.
 - The card only animates while it is on screen, so a wall tablet does not spend its battery on a hidden card.
 
@@ -75,6 +76,7 @@ Every sensor is optional. Sensors you leave out come from the Energy dashboard w
 | `invert` | none | Power entities whose sign is the other way around from what the card expects, for example `[battery]`. |
 | `height` | `420` | Height of the 3D scene in pixels. |
 | `chart` | `true` | Set to `false` to hide the chart of today. |
+| `totals` | `true` | Set to `false` to hide today's totals. They only show when the Energy dashboard has energy meters. |
 | `solar_kwp` | `5.5` | Your solar peak power in kWp. The scene shows one panel per 0.45 kWp, and the panels glow by output against this number. |
 | `ev_name` | `EV` | Name on the car's label. |
 | `devices` | from the Energy dashboard | Extra devices to show, see below. |

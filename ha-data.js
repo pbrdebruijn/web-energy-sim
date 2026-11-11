@@ -151,3 +151,35 @@ export function entitiesFromEnergyPrefs(prefs) {
 export const devicesFromEnergyPrefs = (prefs) => (prefs?.device_consumption ?? [])
   .filter((d) => typeof d.stat_rate === 'string' && /^[a-z_]+\.[a-z0-9_]+$/.test(d.stat_rate))
   .slice(0, 4).map((d) => ({ entity: d.stat_rate, type: 'other', ...(d.name ? { name: d.name } : {}) }));
+
+// kWh meters and cost statistics from the Energy dashboard, as lists of statistic ids per kind (a home can have several)
+export function energyStatsFromPrefs(prefs) {
+  const out = { grid_in: [], grid_out: [], solar: [], batt_out: [], batt_in: [], cost: [], compensation: [] };
+  const put = (k, v) => { if (typeof v === 'string') out[k].push(v); };
+  for (const src of prefs?.energy_sources ?? []) {
+    if (src.type === 'grid') {
+      put('grid_in', src.stat_energy_from); put('grid_out', src.stat_energy_to);
+      put('cost', src.stat_cost); put('compensation', src.stat_compensation);
+      for (const f of src.flow_from ?? []) { put('grid_in', f.stat_energy_from); put('cost', f.stat_cost); } // pre-2025 grid format
+      for (const f of src.flow_to ?? []) { put('grid_out', f.stat_energy_to); put('compensation', f.stat_compensation); }
+    }
+    if (src.type === 'solar') put('solar', src.stat_energy_from);
+    if (src.type === 'battery') { put('batt_out', src.stat_energy_from); put('batt_in', src.stat_energy_to); }
+  }
+  return out;
+}
+
+// Today's totals from the summed change of each kind. cost is null when the Energy dashboard tracks no cost.
+export function dayTotals(sum, hasCost) {
+  const { grid_in: imported = 0, grid_out: exported = 0, solar = 0, batt_out: battOut = 0, batt_in: battIn = 0 } = sum;
+  const used = imported + solar + battOut - exported - battIn;
+  const clamp = (v) => Math.min(1, Math.max(0, v));
+  // Grid energy that charged the battery is used later, from the battery; the battery charges from solar first
+  const gridToBattery = Math.max(0, battIn - Math.max(0, solar - exported));
+  const houseFromGrid = Math.max(0, imported - gridToBattery);
+  return {
+    imported, exported, solar, used,
+    selfSufficient: used > 0 ? clamp(1 - houseFromGrid / used) : null,
+    cost: hasCost ? (sum.cost ?? 0) - (sum.compensation ?? 0) : null,
+  };
+}

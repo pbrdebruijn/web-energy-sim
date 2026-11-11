@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { simulate, buyPrice, SAMPLE, N, sources } from './sim.js';
-import { bucket, toValue, checkConfig, buildDay, pricesFromAttribute, guessEntities, toFormData, fromFormData, entitiesFromEnergyPrefs, devicesFromEnergyPrefs } from './ha-data.js';
+import { bucket, toValue, checkConfig, buildDay, pricesFromAttribute, guessEntities, toFormData, fromFormData, entitiesFromEnergyPrefs, devicesFromEnergyPrefs, energyStatsFromPrefs, dayTotals } from './ha-data.js';
 
 const base = {
   yearlyKwh: 3500, month: 5, kWp: 6, weather: 1, saldering: true,
@@ -117,6 +117,19 @@ assert.deepEqual(devicesFromEnergyPrefs({ device_consumption: [
 checkConfig({ devices: [{ entity: 'sensor.hp_power', type: 'heat_pump', name: 'Warmtepomp' }] });
 assert.throws(() => checkConfig({ devices: [{ entity: 'sensor.x', type: 'rocket' }] }), /not one of/);
 assert.throws(() => checkConfig({ devices: [{ type: 'ac' }] }), /entity/);
+
+// Today's totals: kWh meters per kind, then the share covered without the grid
+const stats = energyStatsFromPrefs({ energy_sources: [
+  { type: 'grid', flow_from: [{ stat_energy_from: 'sensor.t1', stat_cost: 'sensor.t1_cost' }, { stat_energy_from: 'sensor.t2' }], flow_to: [{ stat_energy_to: 'sensor.out' }] },
+  { type: 'solar', stat_energy_from: 'sensor.pv' }, { type: 'battery', stat_energy_from: 'sensor.b_out', stat_energy_to: 'sensor.b_in' },
+] });
+assert.deepEqual([stats.grid_in, stats.grid_out, stats.cost, stats.batt_in], [['sensor.t1', 'sensor.t2'], ['sensor.out'], ['sensor.t1_cost'], ['sensor.b_in']], 'energy meters per kind');
+const tot = dayTotals({ grid_in: 2, grid_out: 3, solar: 10, batt_out: 1, batt_in: 2, cost: 0.6, compensation: 0.2 }, true);
+close(tot.used, 8, 'used = 2 + 10 + 1 - 3 - 2');
+close(tot.selfSufficient, 0.75, 'covered without the grid = 1 - 2/8');
+close(tot.cost, 0.4, 'cost minus compensation');
+assert.equal(dayTotals({}, false).selfSufficient, null, 'no use, no share');
+close(dayTotals({ grid_in: 10, batt_in: 6, batt_out: 5, solar: 0 }, false).selfSufficient, 5 / 9, 'night-charged battery: only the 4 kWh that went straight to the house count as grid use');
 
 // The car name from the config is text, never markup
 const { renderLabels } = await import('./ui.js');

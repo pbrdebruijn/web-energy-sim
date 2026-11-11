@@ -2,8 +2,8 @@
 // and the chart below shows today so far. Built into dist/energy-scene-card.js by `npm run build`.
 import { createScene } from './scene.js';
 import { daylight, N, DT } from './sim.js';
-import { createChart, renderLabels, UI_CSS, hhmm, eur, esc } from './ui.js';
-import { checkConfig, toValue, weatherFactor, historyPoints, bucket, pricesFromAttribute, buildDay, guessEntities, toFormData, fromFormData, POWER_KEYS, entitiesFromEnergyPrefs, devicesFromEnergyPrefs } from './ha-data.js';
+import { createChart, renderLabels, UI_CSS, hhmm, eur, esc, kwh, pct } from './ui.js';
+import { checkConfig, toValue, weatherFactor, historyPoints, bucket, pricesFromAttribute, buildDay, guessEntities, toFormData, fromFormData, POWER_KEYS, entitiesFromEnergyPrefs, devicesFromEnergyPrefs, energyStatsFromPrefs, dayTotals } from './ha-data.js';
 
 const LABEL_ENTITY = { solar: 'solar', home: 'home', grid: 'grid', batt: 'battery', ev: 'ev' };
 const HISTORY_EVERY = 5 * 60e3, CHART_EVERY = 5e3, SCRUB_HOLD = 15e3;
@@ -24,6 +24,9 @@ ha-card { overflow: hidden; }
   font-size: 12px; color: #c3c2b7; background: rgba(26, 26, 25, .88); border: 1px solid rgba(255, 255, 255, .1); border-left: 3px solid #3987e5; }
 .devices button:focus-visible { outline: 2px solid #3987e5; }
 .devices b { color: #f0efec; font-variant-numeric: tabular-nums; }
+.totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; padding: 10px 14px 0; }
+.totals div { background: var(--secondary-background-color, rgba(127, 127, 127, .12)); border-radius: 8px; padding: 6px 10px; font-size: 12px; color: var(--ink2); }
+.totals b { display: block; font-size: 17px; color: var(--ink); font-variant-numeric: tabular-nums; }
 .warn { margin: 0; padding: 8px 14px; color: var(--error-color, #db4437); font-size: 13px; }
 `;
 
@@ -72,6 +75,8 @@ class EnergySceneCard extends HTMLElement {
     const prefs = await energyPrefs(this._hass);
     this.fromEnergy = entitiesFromEnergyPrefs(prefs);
     this.energyDevices = devicesFromEnergyPrefs(prefs);
+    this.energyStats = energyStatsFromPrefs(prefs);
+    this.loadTotals();
     const added = Object.keys(this.fromEnergy).some((k) => !this.config?.entities?.[k]) || (!this.config?.devices && this.energyDevices.length > 0);
     if (added && this.scene) { this.teardown(); this.setup(); } // rebuild once so labels, chart and flows include them
   }
@@ -85,6 +90,7 @@ class EnergySceneCard extends HTMLElement {
     const root = this.shadowRoot ?? this.attachShadow({ mode: 'open' });
     root.innerHTML = `<style>${UI_CSS}${CARD_CSS}</style><ha-card>
       <div class="stage" style="height:${this.height}px"><div class="clock"><time></time><small></small></div><div class="devices"></div></div>
+      <div class="totals" hidden></div>
       <p class="warn" hidden></p>
       ${withChart ? `<section class="charts"><div class="legend"></div>
         <svg class="chart" role="img" aria-label="Price, power and charge level today"></svg><div class="tip"></div></section>` : ''}
@@ -126,7 +132,8 @@ class EnergySceneCard extends HTMLElement {
     // Only animate while the card is on screen; wall tablets keep dashboards open all day.
     this.io = new IntersectionObserver(([entry]) => { this.visible = entry.isIntersecting; if (this.visible) this.start(); });
     this.io.observe(this);
-    this.timer = setInterval(() => this.loadHistory(), HISTORY_EVERY);
+    this.timer = setInterval(() => { this.loadHistory(); this.loadTotals(); }, HISTORY_EVERY);
+    this.renderTotals();
     if (this._hass) { this.loadHistory(); this.applyLive(); }
   }
 
@@ -170,6 +177,33 @@ class EnergySceneCard extends HTMLElement {
       this.histError = `History did not load: ${err.message ?? err}`;
     }
     this.applyLive(true);
+  }
+
+  // Today's kWh from the Energy dashboard's meters, the same numbers its own "today" view shows
+  async loadTotals() {
+    const hass = this._hass, stats = this.energyStats;
+    if (!hass || !stats || this.config.totals === false) return;
+    const ids = Object.entries(stats).flatMap(([kind, list]) => list.map((id) => [kind, id]));
+    if (!ids.some(([kind]) => kind !== 'cost' && kind !== 'compensation')) return;
+    const sum = {};
+    await Promise.all(ids.map(async ([kind, id]) => {
+      const res = await hass.callWS({ type: 'recorder/statistic_during_period', statistic_id: id, calendar: { period: 'day' }, types: ['change'], units: { energy: 'kWh' } })
+        .catch(() => null); // a meter without statistics leaves its kind at zero
+      sum[kind] = (sum[kind] ?? 0) + (Number(res?.change) || 0);
+    }));
+    this.totals = dayTotals(sum, stats.cost.length + stats.compensation.length > 0);
+    this.renderTotals();
+  }
+
+  renderTotals() {
+    const el = this.q?.('.totals'), T = this.totals;
+    if (!el || !T) return;
+    el.hidden = false;
+    el.innerHTML = [
+      [kwh(T.imported), 'Imported today'], [kwh(T.exported), 'Exported today'], [kwh(T.solar), 'Solar today'],
+      T.selfSufficient != null && [pct(T.selfSufficient), 'Covered without the grid'],
+      T.cost != null && [eur(T.cost), 'Energy cost today'],
+    ].filter(Boolean).map(([v, label]) => `<div><b>${v}</b>${label}</div>`).join('');
   }
 
   // Merge the current states into today's history; the slot for "now" shows the live values.
