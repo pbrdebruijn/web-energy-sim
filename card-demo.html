@@ -75,6 +75,11 @@ const hass = () => {
     states,
     async callWS(msg) {
       if (msg.type === 'energy/get_prefs') return ENERGY_PREFS;
+      if (msg.type === 'energy/solar_forecast') { // hourly Wh, a bit above the simulated solar
+        const wh = {};
+        for (let h = 0; h < 24; h++) wh[new Date(+start + h * 3600e3).toISOString()] = 1000 * 1.15 * r.solar[h * 4 + 2];
+        return { forecast_entry: { wh_hours: wh } };
+      }
       if (msg.type === 'recorder/statistic_during_period') {
         const f = METERS[msg.statistic_id];
         return { change: f ? Array.from({ length: slotNow() + 1 }, (_, k) => f(k) * DT).reduce((a, b) => a + b, 0) : null };

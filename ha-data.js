@@ -27,6 +27,9 @@ export function checkConfig(config) {
       if (d.name !== undefined && typeof d.name !== 'string') throw new Error('A device name must be text.');
     }
   }
+  if (config.cheapest_hours !== undefined && !(Number.isInteger(config.cheapest_hours) && config.cheapest_hours >= 0 && config.cheapest_hours <= 24)) {
+    throw new Error('cheapest_hours must be a whole number from 0 to 24.');
+  }
   for (const k of ['height', 'solar_kwp']) {
     if (config[k] !== undefined && !(Number(config[k]) > 0)) throw new Error(`${k} must be a positive number.`);
   }
@@ -182,4 +185,27 @@ export function dayTotals(sum, hasCost) {
     selfSufficient: used > 0 ? clamp(1 - houseFromGrid / used) : null,
     cost: hasCost ? (sum.cost ?? 0) - (sum.compensation ?? 0) : null,
   };
+}
+
+// energy/solar_forecast ({ entry: { wh_hours: { iso start: Wh } } }) as average kW per 15-minute slot of the day
+// starting at dayStart (ms), summed over all forecast entries. null when there is no forecast.
+export function forecastSlots(resp, dayStart) {
+  const slotMs = DT * 3600e3, out = new Array(N).fill(0);
+  let any = false;
+  for (const { wh_hours: wh } of Object.values(resp ?? {})) {
+    const pts = Object.entries(wh ?? {}).map(([iso, v]) => [Date.parse(iso), Number(v)]).filter(([t, v]) => Number.isFinite(t) && Number.isFinite(v)).sort((a, b) => a[0] - b[0]);
+    pts.forEach(([t, v], i) => {
+      const len = (pts[i + 1]?.[0] ?? t + 3600e3) - t; // each value covers the time up to the next one, an hour for the last
+      const kw = v / 1000 / (len / 3600e3);
+      for (let k = Math.max(0, Math.floor((t - dayStart) / slotMs)); k < N && dayStart + k * slotMs < t + len; k++) { out[k] += kw; any = true; }
+    });
+  }
+  return any ? out : null;
+}
+
+// The n cheapest hours from hour `from` to the end of the day, as a Set of hours. prices: per 15-minute slot.
+export function cheapestHours(prices, from, n) {
+  const hours = [];
+  for (let h = Math.max(0, Math.floor(from)); h < 24; h++) if (prices[h * 4] != null) hours.push([prices[h * 4], h]);
+  return new Set(hours.sort((a, b) => a[0] - b[0]).slice(0, n).map(([, h]) => h));
 }

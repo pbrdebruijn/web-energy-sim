@@ -79,8 +79,12 @@ export function createChart({ svg, tip, legend, box }, onSeek) {
   function draw(data = r, opts = show) {
     r = data; show = { price: true, ...opts };
     if (!r) return;
+    const negative = show.price && r.buy.some((p) => p < 0);
     legend.innerHTML = (show.price ? `<span>${dot('#898781')}Price</span>` : '')
-      + ['solar', 'home', 'ev', 'batt', 'grid'].filter((k) => show[k] ?? true).map((k) => `<span>${dot(COLORS[k])}${NAMES[k]}</span>`).join('');
+      + (show.cheap?.size ? `<span>${dot(COLORS.ev)}Cheapest hours</span>` : '')
+      + (negative ? `<span>${dot(COLORS.home)}Negative price, you get paid</span>` : '')
+      + ['solar', 'home', 'ev', 'batt', 'grid'].filter((k) => show[k] ?? true).map((k) => `<span>${dot(COLORS[k])}${NAMES[k]}</span>`).join('')
+      + (show.forecast ? `<span><i style="background:repeating-linear-gradient(90deg,${COLORS.solar} 0 3px,transparent 3px 5px)"></i>Solar forecast</span>` : '');
     const W = svg.clientWidth;
     if (!W) return; // hidden, for example on phones until the chart is opened
     PW = W - ML - MR;
@@ -94,14 +98,14 @@ export function createChart({ svg, tip, legend, box }, onSeek) {
       y = top + h + 6;
       return yOf;
     };
-    const line = (data, yOf, color) => {
+    const line = (data, yOf, color, dash = '') => {
       let d = '', pen = 'M';
       data.forEach((v, i) => {
         if (v == null) { pen = 'M'; return; }
         d += `${pen}${xOf((i + 0.5) * DT).toFixed(1)},${yOf(v).toFixed(1)}`;
         pen = 'L';
       });
-      return d ? `<path fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" d="${d}"/>` : '';
+      return d ? `<path fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" ${dash && `stroke-dasharray="${dash}"`} d="${d}"/>` : '';
     };
     const known = (a) => a.filter((v) => v != null);
 
@@ -112,15 +116,19 @@ export function createChart({ svg, tip, legend, box }, onSeek) {
       hourly.forEach((p, h) => {
         if (p == null) return;
         const a = yOf(Math.max(p, 0)), b = yOf(Math.min(p, 0));
-        s += `<rect x="${xOf(h) + 1}" y="${a}" width="${PW / 24 - 2}" height="${Math.max(1, b - a)}" rx="2" fill="#898781"/>`;
+        const fill = p < 0 ? COLORS.home : show.cheap?.has(h) ? COLORS.ev : '#898781';
+        s += `<rect x="${xOf(h) + 1}" y="${a}" width="${PW / 24 - 2}" height="${Math.max(1, b - a)}" rx="2" fill="${fill}"/>`;
       });
     }
 
     const lines = series().filter((x) => x[3]);
-    const all = known(lines.flatMap((x) => x[2]));
+    // The forecast continues the solar line from now to the end of the day
+    const ahead = show.forecast && show.forecast.map((v, i) => ((i + 1) * DT > (show.now ?? 0) ? v : null));
+    const all = known([...lines.flatMap((x) => x[2]), ...(ahead || [])]);
     const kMin = Math.min(0, ...all), kMax = Math.max(1, ...all);
     let yOf = row('Power, kW. Grid below zero is export', 104, kMin, kMax, kMin < -0.08 * kMax ? [kMin, 0, kMax] : [0, kMax], (v) => v.toFixed(1));
     for (const [k, , data] of lines) s += line(data, yOf, COLORS[k]);
+    if (ahead) s += line(ahead, yOf, COLORS.solar, '4 3');
 
     if (show.batt || show.ev) {
       const pctOf = (a) => a.map((v) => (v == null ? null : v * 100));

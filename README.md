@@ -12,6 +12,7 @@ What the card does:
 - The scenery follows the season. Snow and a snowman in winter, blossom in spring, birds in summer, falling leaves in autumn and a pumpkin in October. A jogger and a dog run past by day.
 - The car drives off when it is unplugged and parks again when it comes back, if you add a plugged-in sensor.
 - A row of tiles shows today's totals from the Energy dashboard: imported, exported, solar, the share of your use covered without the grid, and today's energy cost when the Energy dashboard tracks it. They are the same meter readings the Energy dashboard uses, refreshed every 5 minutes.
+- The chart marks the cheapest hours still to come in green and negative prices in blue, and continues the solar line as a dashed forecast when the Energy dashboard has a solar forecast, such as Forecast.Solar.
 - Drag across the chart to replay earlier today in the scene. After 15 seconds the card returns to now.
 - The card only animates while it is on screen, so a wall tablet does not spend its battery on a hidden card.
 
@@ -76,6 +77,7 @@ Every sensor is optional. Sensors you leave out come from the Energy dashboard w
 | `invert` | none | Power entities whose sign is the other way around from what the card expects, for example `[battery]`. |
 | `height` | `420` | Height of the 3D scene in pixels. |
 | `chart` | `true` | Set to `false` to hide the chart of today. |
+| `cheapest_hours` | `3` | How many of the cheapest hours still to come the chart marks. `0` turns it off. |
 | `totals` | `true` | Set to `false` to hide today's totals. They only show when the Energy dashboard has energy meters. |
 | `solar_kwp` | `5.5` | Your solar peak power in kWp. The scene shows one panel per 0.45 kWp, and the panels glow by output against this number. |
 | `ev_name` | `EV` | Name on the car's label. |

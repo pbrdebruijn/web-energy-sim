@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { simulate, buyPrice, SAMPLE, N, sources } from './sim.js';
-import { bucket, toValue, checkConfig, buildDay, pricesFromAttribute, guessEntities, toFormData, fromFormData, entitiesFromEnergyPrefs, devicesFromEnergyPrefs, energyStatsFromPrefs, dayTotals } from './ha-data.js';
+import { bucket, toValue, checkConfig, buildDay, pricesFromAttribute, guessEntities, toFormData, fromFormData, entitiesFromEnergyPrefs, devicesFromEnergyPrefs, energyStatsFromPrefs, dayTotals, forecastSlots, cheapestHours } from './ha-data.js';
 
 const base = {
   yearlyKwh: 3500, month: 5, kWp: 6, weather: 1, saldering: true,
@@ -130,6 +130,18 @@ close(tot.selfSufficient, 0.75, 'covered without the grid = 1 - 2/8');
 close(tot.cost, 0.4, 'cost minus compensation');
 assert.equal(dayTotals({}, false).selfSufficient, null, 'no use, no share');
 close(dayTotals({ grid_in: 10, batt_in: 6, batt_out: 5, solar: 0 }, false).selfSufficient, 5 / 9, 'night-charged battery: only the 4 kWh that went straight to the house count as grid use');
+
+// Solar forecast: hourly Wh becomes kW per quarter, summed over forecast entries
+const day0 = Date.UTC(2026, 5, 1);
+const fc = forecastSlots({
+  a: { wh_hours: { [new Date(day0 + 12 * 3600e3).toISOString()]: 2000, [new Date(day0 + 13 * 3600e3).toISOString()]: 1000 } },
+  b: { wh_hours: { [new Date(day0 + 12 * 3600e3).toISOString()]: 500 } },
+}, day0);
+assert.deepEqual([fc[47], fc[48], fc[51], fc[52], fc[56]], [0, 2.5, 2.5, 1, 0], 'forecast slots');
+assert.equal(forecastSlots({}, day0), null, 'no forecast');
+const prices = Array.from({ length: N }, (_, i) => [5, 1, 3, 2][Math.floor(i / 4) % 4]);
+assert.deepEqual([...cheapestHours(prices, 2.5, 3)].sort((a, b) => a - b), [5, 9, 13], 'cheapest hours still to come, earliest first on ties');
+assert.ok(!cheapestHours(prices, 2.5, 24).has(1), 'past hours are not offered');
 
 // The car name from the config is text, never markup
 const { renderLabels } = await import('./ui.js');

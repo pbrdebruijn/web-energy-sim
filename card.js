@@ -3,7 +3,7 @@
 import { createScene } from './scene.js';
 import { daylight, N, DT } from './sim.js';
 import { createChart, renderLabels, UI_CSS, hhmm, eur, esc, kwh, pct } from './ui.js';
-import { checkConfig, toValue, weatherFactor, historyPoints, bucket, pricesFromAttribute, buildDay, guessEntities, toFormData, fromFormData, POWER_KEYS, entitiesFromEnergyPrefs, devicesFromEnergyPrefs, energyStatsFromPrefs, dayTotals } from './ha-data.js';
+import { checkConfig, toValue, weatherFactor, historyPoints, bucket, pricesFromAttribute, buildDay, guessEntities, toFormData, fromFormData, POWER_KEYS, entitiesFromEnergyPrefs, devicesFromEnergyPrefs, energyStatsFromPrefs, dayTotals, forecastSlots, cheapestHours } from './ha-data.js';
 
 const LABEL_ENTITY = { solar: 'solar', home: 'home', grid: 'grid', batt: 'battery', ev: 'ev' };
 const HISTORY_EVERY = 5 * 60e3, CHART_EVERY = 5e3, SCRUB_HOLD = 15e3;
@@ -77,6 +77,7 @@ class EnergySceneCard extends HTMLElement {
     this.energyDevices = devicesFromEnergyPrefs(prefs);
     this.energyStats = energyStatsFromPrefs(prefs);
     this.loadTotals();
+    this.loadForecast();
     const added = Object.keys(this.fromEnergy).some((k) => !this.config?.entities?.[k]) || (!this.config?.devices && this.energyDevices.length > 0);
     if (added && this.scene) { this.teardown(); this.setup(); } // rebuild once so labels, chart and flows include them
   }
@@ -132,7 +133,7 @@ class EnergySceneCard extends HTMLElement {
     // Only animate while the card is on screen; wall tablets keep dashboards open all day.
     this.io = new IntersectionObserver(([entry]) => { this.visible = entry.isIntersecting; if (this.visible) this.start(); });
     this.io.observe(this);
-    this.timer = setInterval(() => { this.loadHistory(); this.loadTotals(); }, HISTORY_EVERY);
+    this.timer = setInterval(() => { this.loadHistory(); this.loadTotals(); this.loadForecast(); }, HISTORY_EVERY);
     this.renderTotals();
     if (this._hass) { this.loadHistory(); this.applyLive(); }
   }
@@ -195,6 +196,13 @@ class EnergySceneCard extends HTMLElement {
     this.renderTotals();
   }
 
+  // Solar forecast for today from the forecast linked in the Energy dashboard (Forecast.Solar and others)
+  async loadForecast() {
+    if (!this._hass || !this.prefsAsked) return;
+    this.forecast = forecastSlots(await this._hass.callWS({ type: 'energy/solar_forecast' }).catch(() => null), +midnight());
+    this.applyLive(true);
+  }
+
   renderTotals() {
     const el = this.q?.('.totals'), T = this.totals;
     if (!el || !T) return;
@@ -245,7 +253,8 @@ class EnergySceneCard extends HTMLElement {
     this.version++;
     if (this.chart && (force || !(Date.now() - this.drawnAt < CHART_EVERY))) {
       this.drawnAt = Date.now();
-      this.chart.draw(this.r, this.show);
+      const now = hourOf(new Date()), n = Number(this.config.cheapest_hours ?? 3);
+      this.chart.draw(this.r, { ...this.show, forecast: this.forecast, now, cheap: n > 0 && this.show.price ? cheapestHours(this.r.buy, now, n) : null });
     }
   }
 
