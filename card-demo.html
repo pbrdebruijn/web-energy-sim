@@ -40,13 +40,19 @@ const r = simulate({
 const SENSORS = {
   'sensor.solar_power': [(i) => Math.round(r.solar[i] * 1000), 'W'],
   'sensor.grid_power': [(i) => r.grid[i].toFixed(3), 'kW'],
-  'sensor.battery_power': [(i) => (-r.batt[i]).toFixed(3), 'kW'],
+  'sensor.battery_power_signed': [(i) => r.batt[i].toFixed(3), 'kW'],
   'sensor.battery_level': [(i) => Math.round(r.battSoc[i] * 100), '%'],
   'sensor.wallbox_power': [(i) => r.ev[i].toFixed(3), 'kW'],
   'sensor.car_battery_level': [(i) => Math.round(r.evSoc[i] * 100), '%'],
   'binary_sensor.car_plugged_in': [(i) => (r.evAway[i] ? 'off' : 'on'), ''],
   'sensor.electricity_price': [(i) => r.buy[i].toFixed(4), '€/kWh'],
 };
+// The Energy dashboard knows grid, solar and battery; the card config below only adds the car, price and weather
+const ENERGY_PREFS = { energy_sources: [
+  { type: 'grid', stat_energy_from: 'sensor.grid_energy_in', stat_energy_to: 'sensor.grid_energy_out', stat_rate: 'sensor.grid_power' },
+  { type: 'solar', stat_energy_from: 'sensor.solar_energy', stat_rate: 'sensor.solar_power' },
+  { type: 'battery', stat_energy_from: 'sensor.battery_energy_out', stat_energy_to: 'sensor.battery_energy_in', stat_rate: 'sensor.battery_power_signed', stat_soc: 'sensor.battery_level' },
+], device_consumption: [] };
 const start = new Date(); start.setHours(0, 0, 0, 0);
 const slotNow = () => Math.min(N - 1, Math.floor((Date.now() - start) / (DT * 3600e3)));
 
@@ -58,6 +64,7 @@ const hass = () => {
   return {
     states,
     async callWS(msg) {
+      if (msg.type === 'energy/get_prefs') return ENERGY_PREFS;
       const out = {};
       for (const id of msg.entity_ids) {
         const [f] = SENSORS[id] ?? [() => 'unknown'];
@@ -72,11 +79,9 @@ const card = document.querySelector('energy-scene-card');
 card.setConfig({
   ev_name: 'Model Y',
   entities: {
-    solar: 'sensor.solar_power', grid: 'sensor.grid_power', battery: 'sensor.battery_power', battery_soc: 'sensor.battery_level',
     ev: 'sensor.wallbox_power', ev_soc: 'sensor.car_battery_level', ev_plugged: 'binary_sensor.car_plugged_in',
     price: 'sensor.electricity_price', weather: 'weather.home',
   },
-  invert: ['battery'],
 });
 card.hass = hass();
 setInterval(() => { card.hass = hass(); }, 10000);

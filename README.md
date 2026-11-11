@@ -38,7 +38,9 @@ HACS adds the dashboard resource for you.
 
 ## Add the card
 
-Edit a dashboard, choose **Add card** and pick **Energy scene**. The card looks through your sensors and fills in a first guess for grid, solar, battery, car, price and weather. Check each pick in the editor and change the ones that are wrong. Every field has a short note on what the card expects.
+Edit a dashboard, choose **Add card** and pick **Energy scene**.
+
+If you added power sensors to the **Energy dashboard** (Settings → Dashboards → Energy), the card uses those for grid, solar, home battery and house use. It also follows later changes there. For everything else, like the car, price and weather, the card looks through your sensors and fills in a first guess. Check each pick in the editor and change the ones that are wrong. Every field has a short note on what the card expects.
 
 If a flow runs the wrong way in the preview, pick that sensor under **Reverse the sign of**.
 
@@ -50,7 +52,7 @@ You can also add a **Manual** card and paste this, with your own entity ids:
 type: custom:energy-scene-card
 ev_name: Model Y
 entities:
-  grid: sensor.grid_power                  # required
+  grid: sensor.grid_power
   solar: sensor.solar_power
   battery: sensor.battery_power
   battery_soc: sensor.battery_level
@@ -63,7 +65,7 @@ invert:
   - battery
 ```
 
-Only `grid` is required. A card with just `grid` and `solar` works fine.
+Every sensor is optional. Sensors you leave out come from the Energy dashboard when it has them, so `type: custom:energy-scene-card` on its own works for a home with power sensors set up there. Without the Energy dashboard, add at least `grid`.
 
 ## Options
 

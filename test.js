@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { simulate, buyPrice, SAMPLE, N, sources } from './sim.js';
-import { bucket, toValue, checkConfig, buildDay, pricesFromAttribute, guessEntities, toFormData, fromFormData } from './ha-data.js';
+import { bucket, toValue, checkConfig, buildDay, pricesFromAttribute, guessEntities, toFormData, fromFormData, entitiesFromEnergyPrefs } from './ha-data.js';
 
 const base = {
   yearlyKwh: 3500, month: 5, kWp: 6, weather: 1, saldering: true,
@@ -59,8 +59,8 @@ close(toValue('price', '25.1', 'ct/kWh'), 0.251, 'cents become euros');
 assert.equal(toValue('grid', 'unavailable', 'kW'), null, 'unavailable is unknown, not zero');
 assert.equal(toValue('ev_plugged', 'off'), 0, 'unplugged');
 
-assert.throws(() => checkConfig({}), /entities/);
-assert.throws(() => checkConfig({ entities: { solar: 'sensor.a' } }), /grid is required/);
+checkConfig({}); // all sensors may come from the Energy dashboard
+assert.throws(() => checkConfig({ entities: ['sensor.a'] }), /entities must be/);
 assert.throws(() => checkConfig({ entities: { grid: 'sensor.a', sun: 'sensor.b' } }), /Unknown entities.sun/);
 assert.throws(() => checkConfig({ entities: { grid: 'not an id' } }), /entity id/);
 assert.throws(() => checkConfig({ entities: { grid: 'sensor.a' }, invert: ['price'] }), /invert/);
@@ -102,6 +102,16 @@ const guess2 = guessEntities(Object.fromEntries([
   st('sensor.hallway_motion_battery', 'battery', '%'), st('sensor.battery_power', 'power', 'kW'), st('sensor.battery_level', null, '%'),
 ].map((x) => [x.entity_id, x])));
 assert.equal(guess2.battery_soc, 'sensor.battery_level', 'battery level found by the power sensor name, not a motion sensor');
+// Energy dashboard power sensors become the card's entities; external statistics and energy-only sources are skipped
+assert.deepEqual(entitiesFromEnergyPrefs({ energy_sources: [
+  { type: 'grid', stat_energy_from: 'sensor.grid_in', stat_rate: 'sensor.grid_power' },
+  { type: 'solar', stat_energy_from: 'sensor.pv_energy', stat_rate: 'sensor.pv_power' },
+  { type: 'solar', stat_energy_from: 'sensor.pv2_energy', stat_rate: 'sensor.pv2_power' },
+  { type: 'battery', stat_energy_from: 'a', stat_energy_to: 'b', stat_rate: 'tesla:battery_power', stat_soc: 'sensor.batt_soc' },
+] }), { grid: 'sensor.grid_power', solar: 'sensor.pv_power', battery_soc: 'sensor.batt_soc' }, 'energy dashboard sensors');
+assert.deepEqual(entitiesFromEnergyPrefs({ energy_sources: [{ type: 'grid', flow_from: [], power: [{ stat_rate: 'sensor.p1' }] }] }), { grid: 'sensor.p1' }, 'pre-2025 grid format');
+assert.deepEqual(entitiesFromEnergyPrefs(null), {}, 'no Energy dashboard');
+
 // The car name from the config is text, never markup
 const { renderLabels } = await import('./ui.js');
 const tag = () => ({ innerHTML: '', classList: { toggle() {} } });

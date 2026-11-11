@@ -8,9 +8,8 @@ const SLOT_MS = DT * 3600e3;
 
 // The card config comes from the user's YAML: fail with a message that says what to fix.
 export function checkConfig(config) {
-  const e = config?.entities;
-  if (!e || typeof e !== 'object') throw new Error('Add "entities:" with at least "grid: sensor.your_grid_power".');
-  if (!e.grid) throw new Error('entities.grid is required: a power sensor, positive when importing from the grid.');
+  const e = config?.entities ?? {}; // sensors left out come from the Energy dashboard
+  if (typeof e !== 'object' || Array.isArray(e)) throw new Error('entities must be a list of keys and entity ids, like "grid: sensor.grid_power".');
   for (const [k, v] of Object.entries(e)) {
     if (!ENTITY_KEYS.includes(k)) throw new Error(`Unknown entities.${k}. Use: ${ENTITY_KEYS.join(', ')}.`);
     if (typeof v !== 'string' || !/^[a-z_]+\.[a-z0-9_]+$/.test(v)) throw new Error(`entities.${k} must be an entity id like sensor.solar_power.`);
@@ -86,7 +85,7 @@ export function buildDay(slots) {
 // First guess at the user's sensors when the card is added, from entity ids, names and device classes.
 // Users check and correct the picks in the visual editor.
 export function guessEntities(states) {
-  const all = Object.values(states);
+  const all = Object.entries(states).map(([entity_id, st]) => ({ ...st, entity_id })); // the map key is the entity id
   const text = (s) => `${s.entity_id} ${s.attributes?.friendly_name ?? ''}`.toLowerCase();
   const sensors = all.filter((s) => s.entity_id.startsWith('sensor.'));
   const power = sensors.filter((s) => s.attributes?.device_class === 'power' || /^(k|M)?W$/.test(s.attributes?.unit_of_measurement ?? ''));
@@ -120,6 +119,21 @@ export function fromFormData(data, config) {
     const v = data[k];
     if (v === undefined || v === '' || (Array.isArray(v) && !v.length)) delete out[k];
     else out[k] = v;
+  }
+  return out;
+}
+
+// Power sensors the user already set up in the Energy dashboard (energy/get_prefs). Its signs match the card's:
+// grid positive when importing, battery positive when discharging. External statistics ("domain:id") are not entities.
+export function entitiesFromEnergyPrefs(prefs) {
+  const id = (s) => (typeof s === 'string' && /^[a-z_]+\.[a-z0-9_]+$/.test(s) ? s : undefined);
+  const out = {};
+  const put = (k, v) => { if (!out[k] && id(v)) out[k] = v; };
+  for (const src of prefs?.energy_sources ?? []) {
+    if (src.type === 'grid') put('grid', src.stat_rate ?? src.power?.[0]?.stat_rate); // power[] is the pre-2025 grid format
+    if (src.type === 'solar') put('solar', src.stat_rate); // shortcut: first solar source only, sum several when someone asks
+    if (src.type === 'battery') { put('battery', src.stat_rate); put('battery_soc', src.stat_soc); }
+    if (src.type === 'home') put('home', src.stat_rate);
   }
   return out;
 }

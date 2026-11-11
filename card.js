@@ -3,7 +3,7 @@
 import { createScene } from './scene.js';
 import { daylight, N, DT } from './sim.js';
 import { createChart, renderLabels, UI_CSS, hhmm, eur } from './ui.js';
-import { checkConfig, toValue, weatherFactor, historyPoints, bucket, pricesFromAttribute, buildDay, guessEntities, toFormData, fromFormData, POWER_KEYS } from './ha-data.js';
+import { checkConfig, toValue, weatherFactor, historyPoints, bucket, pricesFromAttribute, buildDay, guessEntities, toFormData, fromFormData, POWER_KEYS, entitiesFromEnergyPrefs } from './ha-data.js';
 
 const LABEL_ENTITY = { solar: 'solar', home: 'home', grid: 'grid', batt: 'battery', ev: 'ev' };
 const HISTORY_EVERY = 5 * 60e3, CHART_EVERY = 5e3, SCRUB_HOLD = 15e3;
@@ -26,9 +26,11 @@ const midnight = (d = new Date()) => new Date(d.getFullYear(), d.getMonth(), d.g
 const hourOf = (d) => d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
 
 class EnergySceneCard extends HTMLElement {
-  // A new card starts with a guess at the user's sensors, to check in the editor
-  static getStubConfig(hass) {
-    return { entities: { grid: 'sensor.grid_power', ...(hass ? guessEntities(hass.states) : {}) } };
+  // A new card uses the Energy dashboard's power sensors; for anything not set up there it starts with a guess to check in the editor
+  static async getStubConfig(hass) {
+    if (!hass) return {};
+    const fromEnergy = entitiesFromEnergyPrefs(await energyPrefs(hass));
+    return { entities: Object.fromEntries(Object.entries(guessEntities(hass.states)).filter(([k]) => !fromEnergy[k])) };
   }
 
   static async getConfigElement() {
@@ -44,6 +46,7 @@ class EnergySceneCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    if (!this.prefsAsked) this.loadEnergyPrefs();
     if (!this.scene) return;
     if (!this.hist) this.loadHistory();
     this.applyLive();
@@ -53,7 +56,15 @@ class EnergySceneCard extends HTMLElement {
   getGridOptions() { return { columns: 12, min_columns: 6 }; }
 
   get height() { return Number(this.config.height ?? 420); }
-  get entities() { return this.config.entities; }
+  // Sensors from the Energy dashboard, overridden by the card config
+  get entities() { return { ...this.fromEnergy, ...this.config.entities }; }
+
+  async loadEnergyPrefs() {
+    this.prefsAsked = true;
+    this.fromEnergy = entitiesFromEnergyPrefs(await energyPrefs(this._hass));
+    const added = Object.keys(this.fromEnergy).some((k) => !this.config?.entities?.[k]);
+    if (added && this.scene) { this.teardown(); this.setup(); } // rebuild once so labels, chart and flows include them
+  }
 
   connectedCallback() { this.setup(); }
   disconnectedCallback() { this.teardown(); }
@@ -157,6 +168,7 @@ class EnergySceneCard extends HTMLElement {
       this.live[k] = toValue(k, st.state, st.attributes.unit_of_measurement, invert.includes(k));
       if (k === 'price') prices = pricesFromAttribute(st.attributes.today);
     }
+    if (!e.grid && this.prefsAsked) missing.push('no grid power sensor. Pick one in the card editor, or add one to the Energy dashboard');
     this.warn(missing.length ? `Entity not found: ${missing.join(', ')}` : this.histError ?? '');
 
     const i = Math.min(N - 1, Math.floor(hourOf(new Date()) / DT));
@@ -218,14 +230,14 @@ class EnergySceneCard extends HTMLElement {
 // ---- Visual editor: Home Assistant's own form with entity pickers ----
 const sensor = { entity: { filter: { domain: 'sensor' } } };
 const FIELDS = [
-  ['grid', 'Grid power', 'Positive when importing, negative when exporting', sensor, true],
-  ['solar', 'Solar power', null, sensor],
-  ['battery', 'Home battery power', 'Positive when discharging into the house', sensor],
-  ['battery_soc', 'Home battery level', null, sensor],
+  ['grid', 'Grid power', 'Positive when importing, negative when exporting. Empty: the power sensor from the Energy dashboard', sensor],
+  ['solar', 'Solar power', 'Empty: the power sensor from the Energy dashboard', sensor],
+  ['battery', 'Home battery power', 'Positive when discharging into the house. Empty: from the Energy dashboard', sensor],
+  ['battery_soc', 'Home battery level', 'Empty: from the Energy dashboard', sensor],
   ['ev', 'EV charger power', 'Positive when charging the car', sensor],
   ['ev_soc', 'Car battery level', null, sensor],
   ['ev_plugged', 'Car plugged in', 'On or home while the car is plugged in. Without it the car stays parked.', { entity: { filter: [{ domain: 'binary_sensor' }, { domain: 'device_tracker' }] } }],
-  ['home', 'House consumption', 'Leave empty to work it out from the other sensors', sensor],
+  ['home', 'House consumption', 'Empty: from the Energy dashboard, or worked out from the other sensors', sensor],
   ['price', 'Electricity price', 'In € or ct per kWh', sensor],
   ['weather', 'Weather', 'Clouds and sunshine in the scene', { entity: { filter: { domain: 'weather' } } }],
   ['invert', 'Reverse the sign of', 'Pick a sensor here when its flow runs the wrong way in the scene', {
@@ -236,8 +248,11 @@ const FIELDS = [
   ['height', 'Scene height', null, { number: { min: 200, max: 1000, step: 10, unit_of_measurement: 'px', mode: 'box' } }],
   ['chart', 'Show the chart of today', null, { boolean: {} }],
 ];
-const SCHEMA = FIELDS.map(([name, , , selector, required]) => ({ name, selector, ...(required ? { required } : {}) }));
+const SCHEMA = FIELDS.map(([name, , , selector]) => ({ name, selector }));
 const FIELD = Object.fromEntries(FIELDS.map((f) => [f[0], f]));
+
+// The Energy dashboard setup, or null when it is not set up (the call then fails with not_found)
+const energyPrefs = (hass) => hass.callWS({ type: 'energy/get_prefs' }).catch(() => null);
 
 // ha-form loads lazily in Home Assistant. Opening a built-in card's editor once makes sure it is defined.
 async function loadHaForm() {
