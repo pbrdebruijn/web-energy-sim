@@ -5,10 +5,12 @@
   "scripts": {
     "start": "python3 -m http.server 5173",
     "test": "node test.js",
-    "build": "esbuild card.js --bundle --minify --format=esm --target=es2020 --legal-comments=none --outfile=dist/energy-scene-card.js"
+    "build": "esbuild card.js --bundle --minify --format=esm --target=es2020 --legal-comments=none --outfile=dist/energy-scene-card.js",
+    "bench": "node bench.js"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
+    "playwright-core": "^1.65.0",
     "three": "^0.170.0"
   }
 }
