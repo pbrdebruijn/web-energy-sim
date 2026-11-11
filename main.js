@@ -359,7 +359,7 @@ function frame(ts) {
   const ph = $('ph'); // missing until the chart is first drawn
   if (ph) { ph.setAttribute('x1', xOf(t)); ph.setAttribute('x2', xOf(t)); }
   scene.update({
-    t, rise, set: sunset, weather: cfg.weather, kWp: cfg.kWp,
+    t, month: cfg.month, rise, set: sunset, weather: cfg.weather, kWp: cfg.kWp,
     solar: r.solar[i], home: r.home[i], ev: r.ev[i], batt: r.batt[i], grid: r.grid[i],
     battSoc: r.battSoc[i], battOn: cfg.batt.on, evOn: cfg.ev.on, evAway, evPlugged: !away,
   }, dt);

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { createSeasons } from './season.js';
 
 export const COLORS = { solar: '#c98500', home: '#3987e5', ev: '#199e70', batt: '#9085e9', grid: '#d95926' };
 
@@ -53,7 +54,8 @@ export function createScene(container) {
   const box = (w, h, d, material, x, y, z, parent) => add(new THREE.BoxGeometry(w, h, d), material, x, y, z, parent);
 
   // Lot, street, driveway
-  box(26, 0.5, 22, mat('#7cc66a'), 0, -0.25, 0);
+  const grassMat = mat('#7cc66a');
+  box(26, 0.5, 22, grassMat, 0, -0.25, 0);
   box(26, 0.06, 3, mat('#555b66'), 0, 0.03, 9.5);
   box(2.8, 0.06, 10.4, mat('#c9c4b8'), 6.3, 0.03, 3);
   box(1.4, 0.06, 6, mat('#c9c4b8'), -2, 0.03, 5);
@@ -105,9 +107,10 @@ export function createScene(container) {
   box(0.9, 1, 0.7, mat('#8b9199'), -9, 0.5, 6.5);
 
   // Trees
+  const coneMat = mat('#3f8f4f');
   for (const [x, z, s] of [[-10, -6, 1.2], [-8.5, -1, 0.9], [9.5, -7, 1.3], [10.5, 4, 1]]) {
     add(new THREE.CylinderGeometry(0.2 * s, 0.26 * s, 1.4 * s, 8), mat('#6b4a2f'), x, 0.7 * s, z);
-    add(new THREE.ConeGeometry(1.3 * s, 2.8 * s, 8), mat('#3f8f4f'), x, 2.6 * s, z);
+    add(new THREE.ConeGeometry(1.3 * s, 2.8 * s, 8), coneMat, x, 2.6 * s, z);
   }
 
   // Sun, moon, clouds
@@ -173,11 +176,13 @@ export function createScene(container) {
   new ResizeObserver(resize).observe(container);
   resize();
 
+  const seasons = createSeasons({ scene, add, box, mat, grassMat, coneMat });
+
   const NIGHT = new THREE.Color('#0b1026'), DAY = new THREE.Color('#8ecae6'), DUSK = new THREE.Color('#f79d5c'), GREY = new THREE.Color('#aab4bd');
   const tmp = V(0, 0, 0);
   let clock = 0;
 
-  // s: { t, rise, set, weather, kWp, solar, home, ev, batt, grid, battSoc, battOn, evOn, evAway (0 parked..1 gone), evPlugged }
+  // s: { t, month, rise, set, weather, kWp, solar, home, ev, batt, grid, battSoc, battOn, evOn, evAway (0 parked..1 gone), evPlugged }
   function update(s, dt) {
     clock += dt;
     const dayLen = s.set - s.rise;
@@ -217,6 +222,8 @@ export function createScene(container) {
         if (d.visible) d.position.copy(f.curve.getPointAt((i / n + f.phase) % 1));
       });
     }
+
+    seasons(s.month, day, dt, clock);
 
     controls.update();
     renderer.render(scene, camera);
