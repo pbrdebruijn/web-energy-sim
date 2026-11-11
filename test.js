@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { simulate, buyPrice, SAMPLE, N } from './sim.js';
-import { bucket, toValue, checkConfig, buildDay, pricesFromAttribute } from './ha-data.js';
+import { bucket, toValue, checkConfig, buildDay, pricesFromAttribute, guessEntities, toFormData, fromFormData } from './ha-data.js';
 
 const base = {
   yearlyKwh: 3500, month: 5, kWp: 6, weather: 1, saldering: true,
@@ -72,4 +72,34 @@ close(day.home[0], 0.5, 'home use follows from the balance: 3 - 1 - 0.5 - 1');
 assert.equal(day.evAway[0], false, 'without a plugged-in sensor the car stays home');
 assert.equal(pricesFromAttribute([1, 2]), null, 'odd price lists are ignored');
 assert.equal(pricesFromAttribute([...Array(24).keys()])[5], 1, 'hourly prices fill four quarters each');
+
+// The first guess at sensors picks the right ones out of a typical mix, and skips phones and the car for the home battery.
+const st = (id, device_class, unit, name = '') => ({ entity_id: id, attributes: { device_class, unit_of_measurement: unit, friendly_name: name } });
+const guess = guessEntities(Object.fromEntries([
+  st('sensor.p1_meter_active_power', 'power', 'W', 'P1 Meter Active power'),
+  st('sensor.solaredge_ac_power', 'power', 'W', 'SolarEdge AC power'),
+  st('sensor.iphone_battery_level', 'battery', '%', 'iPhone Battery Level'),
+  st('sensor.model_y_battery_level', 'battery', '%', 'Model Y Battery level'),
+  st('sensor.home_battery_soc', 'battery', '%', 'Home battery SoC'),
+  st('sensor.home_battery_power', 'power', 'kW', 'Home battery power'),
+  st('sensor.easee_power', 'power', 'kW', 'Easee charger power'),
+  st('sensor.gas_price', null, '€/m³', 'Gas price'),
+  st('sensor.current_electricity_price', null, '€/kWh', 'Electricity price'),
+  { entity_id: 'weather.home', attributes: {} },
+].map((x) => [x.entity_id, x])));
+assert.deepEqual(guess, {
+  grid: 'sensor.p1_meter_active_power', solar: 'sensor.solaredge_ac_power', battery: 'sensor.home_battery_power',
+  battery_soc: 'sensor.home_battery_soc', ev: 'sensor.easee_power', ev_soc: 'sensor.model_y_battery_level',
+  price: 'sensor.current_electricity_price', weather: 'weather.home',
+}, 'sensor guesses');
+
+// Editor round trip: flat form data back to entities, empty values dropped
+const cfg0 = { type: 'custom:energy-scene-card', entities: { grid: 'sensor.g', solar: 'sensor.s' }, invert: ['grid'], height: 400 };
+assert.deepEqual(fromFormData(toFormData(cfg0), cfg0), cfg0, 'round trip keeps the config');
+assert.deepEqual(fromFormData({ grid: 'sensor.g', solar: '', invert: [] }, cfg0),
+  { type: 'custom:energy-scene-card', entities: { grid: 'sensor.g' } }, 'cleared fields leave the config');
+const guess2 = guessEntities(Object.fromEntries([
+  st('sensor.hallway_motion_battery', 'battery', '%'), st('sensor.battery_power', 'power', 'kW'), st('sensor.battery_level', null, '%'),
+].map((x) => [x.entity_id, x])));
+assert.equal(guess2.battery_soc, 'sensor.battery_level', 'battery level found by the power sensor name, not a motion sensor');
 console.log('ok card data');

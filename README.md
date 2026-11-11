@@ -37,7 +37,13 @@ HACS adds the dashboard resource for you.
 
 ## Add the card
 
-Edit a dashboard, add a **Manual** card and paste this, with your own entity ids:
+Edit a dashboard, choose **Add card** and pick **Energy scene**. The card looks through your sensors and fills in a first guess for grid, solar, battery, car, price and weather. Check each pick in the editor and change the ones that are wrong. Every field has a short note on what the card expects.
+
+If a flow runs the wrong way in the preview, pick that sensor under **Reverse the sign of**.
+
+### In YAML
+
+You can also add a **Manual** card and paste this, with your own entity ids:
 
 ```yaml
 type: custom:energy-scene-card

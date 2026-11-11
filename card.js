@@ -3,7 +3,7 @@
 import { createScene } from './scene.js';
 import { daylight, N, DT } from './sim.js';
 import { createChart, renderLabels, UI_CSS, hhmm, eur } from './ui.js';
-import { checkConfig, toValue, weatherFactor, historyPoints, bucket, pricesFromAttribute, buildDay } from './ha-data.js';
+import { checkConfig, toValue, weatherFactor, historyPoints, bucket, pricesFromAttribute, buildDay, guessEntities, toFormData, fromFormData, POWER_KEYS } from './ha-data.js';
 
 const LABEL_ENTITY = { solar: 'solar', home: 'home', grid: 'grid', batt: 'battery', ev: 'ev' };
 const HISTORY_EVERY = 5 * 60e3, CHART_EVERY = 5e3, SCRUB_HOLD = 15e3;
@@ -24,8 +24,14 @@ const midnight = (d = new Date()) => new Date(d.getFullYear(), d.getMonth(), d.g
 const hourOf = (d) => d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
 
 class EnergySceneCard extends HTMLElement {
-  static getStubConfig() {
-    return { entities: { grid: 'sensor.grid_power', solar: 'sensor.solar_power' } };
+  // A new card starts with a guess at the user's sensors, to check in the editor
+  static getStubConfig(hass) {
+    return { entities: { grid: 'sensor.grid_power', ...(hass ? guessEntities(hass.states) : {}) } };
+  }
+
+  static async getConfigElement() {
+    await loadHaForm();
+    return document.createElement('energy-scene-card-editor');
   }
 
   setConfig(config) {
@@ -202,7 +208,60 @@ class EnergySceneCard extends HTMLElement {
   };
 }
 
+// ---- Visual editor: Home Assistant's own form with entity pickers ----
+const sensor = { entity: { filter: { domain: 'sensor' } } };
+const FIELDS = [
+  ['grid', 'Grid power', 'Positive when importing, negative when exporting', sensor, true],
+  ['solar', 'Solar power', null, sensor],
+  ['battery', 'Home battery power', 'Positive when discharging into the house', sensor],
+  ['battery_soc', 'Home battery level', null, sensor],
+  ['ev', 'EV charger power', 'Positive when charging the car', sensor],
+  ['ev_soc', 'Car battery level', null, sensor],
+  ['ev_plugged', 'Car plugged in', 'On or home while the car is plugged in. Without it the car stays parked.', { entity: { filter: [{ domain: 'binary_sensor' }, { domain: 'device_tracker' }] } }],
+  ['home', 'House consumption', 'Leave empty to work it out from the other sensors', sensor],
+  ['price', 'Electricity price', 'In € or ct per kWh', sensor],
+  ['weather', 'Weather', 'Clouds and sunshine in the scene', { entity: { filter: { domain: 'weather' } } }],
+  ['invert', 'Reverse the sign of', 'Pick a sensor here when its flow runs the wrong way in the scene', {
+    select: { multiple: true, mode: 'list', options: POWER_KEYS.map((k) => ({ value: k, label: { solar: 'Solar power', grid: 'Grid power', battery: 'Home battery power', ev: 'EV charger power', home: 'House consumption' }[k] })) },
+  }],
+  ['ev_name', 'Car name', 'Shown on the car label', { text: {} }],
+  ['solar_kwp', 'Solar peak power', 'Sets how many panels the roof shows', { number: { min: 0.5, max: 30, step: 0.5, unit_of_measurement: 'kWp', mode: 'box' } }],
+  ['height', 'Scene height', null, { number: { min: 200, max: 1000, step: 10, unit_of_measurement: 'px', mode: 'box' } }],
+  ['chart', 'Show the chart of today', null, { boolean: {} }],
+];
+const SCHEMA = FIELDS.map(([name, , , selector, required]) => ({ name, selector, ...(required ? { required } : {}) }));
+const FIELD = Object.fromEntries(FIELDS.map((f) => [f[0], f]));
+
+// ha-form loads lazily in Home Assistant. Opening a built-in card's editor once makes sure it is defined.
+async function loadHaForm() {
+  if (customElements.get('ha-form')) return;
+  const helpers = await window.loadCardHelpers?.();
+  const card = await helpers?.createCardElement({ type: 'entities', entities: [] });
+  await card?.constructor?.getConfigElement?.();
+}
+
+class EnergySceneCardEditor extends HTMLElement {
+  setConfig(config) { this.config = config; this.render(); }
+  set hass(hass) { this._hass = hass; this.render(); }
+
+  render() {
+    if (!this.config || !this._hass) return;
+    if (!this.form) {
+      this.form = document.createElement('ha-form');
+      this.form.computeLabel = (f) => FIELD[f.name][1];
+      this.form.computeHelper = (f) => FIELD[f.name][2] ?? '';
+      this.form.addEventListener('value-changed', (e) => {
+        this.config = fromFormData(e.detail.value, this.config);
+        this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: this.config }, bubbles: true, composed: true }));
+      });
+      this.append(this.form);
+    }
+    Object.assign(this.form, { hass: this._hass, schema: SCHEMA, data: { ...toFormData(this.config), chart: this.config.chart !== false } });
+  }
+}
+
 if (!customElements.get('energy-scene-card')) {
+  customElements.define('energy-scene-card-editor', EnergySceneCardEditor);
   customElements.define('energy-scene-card', EnergySceneCard);
   window.customCards = window.customCards || [];
   window.customCards.push({

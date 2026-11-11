@@ -80,3 +80,45 @@ export function buildDay(slots) {
     evAway: s('ev_plugged', empty).map((v) => v === 0),
   };
 }
+
+// ---- Card editor ----
+// First guess at the user's sensors when the card is added, from entity ids, names and device classes.
+// Users check and correct the picks in the visual editor.
+export function guessEntities(states) {
+  const all = Object.values(states);
+  const text = (s) => `${s.entity_id} ${s.attributes?.friendly_name ?? ''}`.toLowerCase();
+  const sensors = all.filter((s) => s.entity_id.startsWith('sensor.'));
+  const power = sensors.filter((s) => s.attributes?.device_class === 'power' || /^(k|M)?W$/.test(s.attributes?.unit_of_measurement ?? ''));
+  const level = sensors.filter((s) => s.attributes?.device_class === 'battery' || s.attributes?.unit_of_measurement === '%');
+  const CAR = /\b(car|ev|tesla|vehicle|auto)\b|model.?[3ysx]\b/, GADGET = /phone|tablet|ipad|watch|remote|button|motion|door|window|temperature|leak/;
+  const find = (list, want, not) => list.find((s) => want.test(text(s)) && !(not && not.test(text(s))))?.entity_id;
+  const battery = find(power, /batter/, CAR);
+  // Many devices report a battery level; prefer one named like the home battery's power sensor (sensor.home_battery_*)
+  const battPrefix = battery?.split('.')[1].split('_')[0];
+  const picks = {
+    grid: find(power, /grid|net.?power|p1|electricity.?meter|power.?consumption/, /solar|batter/),
+    solar: find(power, /solar|\bpv\b|inverter|photovoltaic/),
+    battery,
+    battery_soc: find(level, /home.?batter|batter.*(soc|state.?of.?charge)|powerwall|storage/, new RegExp(`${CAR.source}|${GADGET.source}`))
+      ?? (battPrefix && find(level, new RegExp(`^sensor\\.${battPrefix}_`), new RegExp(`${CAR.source}|${GADGET.source}`))),
+    ev: find(power, /charger|wallbox|charge.?point|easee|zaptec|alfen|ev.?charg/),
+    ev_soc: find(level, CAR, GADGET),
+    price: find(sensors, /price|tariff|nord.?pool|energyzero|zonneplan/, /gas/),
+    weather: all.find((s) => s.entity_id.startsWith('weather.'))?.entity_id,
+  };
+  return Object.fromEntries(Object.entries(picks).filter(([, v]) => v));
+}
+
+// The editor form is flat; the card config keeps sensors under entities.
+const OPTION_KEYS = ['invert', 'ev_name', 'solar_kwp', 'height', 'chart'];
+export const toFormData = (config) => ({ ...config.entities, ...Object.fromEntries(OPTION_KEYS.map((k) => [k, config[k]])) });
+export function fromFormData(data, config) {
+  const out = { ...config, entities: {} };
+  for (const k of ENTITY_KEYS) if (data[k]) out.entities[k] = data[k];
+  for (const k of OPTION_KEYS) {
+    const v = data[k];
+    if (v === undefined || v === '' || (Array.isArray(v) && !v.length)) delete out[k];
+    else out[k] = v;
+  }
+  return out;
+}
