@@ -154,8 +154,8 @@ export function createChart({ svg, tip, legend, box }, onSeek) {
   return {
     draw,
     playhead(t) {
-      const ph = q('.ph'); // missing until the chart is first drawn
-      if (ph) { ph.setAttribute('x1', xOf(t)); ph.setAttribute('x2', xOf(t)); }
+      const ph = q('.ph'), x = xOf(t).toFixed(1); // .ph is missing until the chart is first drawn
+      if (ph && ph.getAttribute('x1') !== x) { ph.setAttribute('x1', x); ph.setAttribute('x2', x); } // skip repaints when it has not moved
     },
   };
 }

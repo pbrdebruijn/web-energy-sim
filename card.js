@@ -7,6 +7,8 @@ import { checkConfig, toValue, weatherFactor, historyPoints, bucket, pricesFromA
 
 const LABEL_ENTITY = { solar: 'solar', home: 'home', grid: 'grid', batt: 'battery', ev: 'ev' };
 const HISTORY_EVERY = 5 * 60e3, CHART_EVERY = 5e3, SCRUB_HOLD = 15e3;
+// 30 fps is smooth enough for a dashboard and halves the GPU work on 60 Hz screens; 2 ms slack absorbs vsync jitter
+const FRAME_MS = 1000 / 30 - 2;
 
 const CARD_CSS = `
 :host { display: block; --ink: var(--primary-text-color, #f0efec); --ink2: var(--secondary-text-color, #c3c2b7);
@@ -181,6 +183,8 @@ class EnergySceneCard extends HTMLElement {
   frame = (ts) => {
     this.raf = 0;
     if (!this.scene || !this.visible) return;
+    if (ts - this.last < FRAME_MS) { this.raf = requestAnimationFrame(this.frame); return; }
+    this.frames = (this.frames ?? 0) + 1; // rendered frames, read by bench.js
     const dt = Math.min(0.1, (ts - this.last) / 1000);
     this.last = ts;
     const now = new Date();
@@ -197,7 +201,8 @@ class EnergySceneCard extends HTMLElement {
       renderLabels(this.scene.labels, r, i, { batt: this.show.batt, ev: this.show.ev, evName: this.config.ev_name ?? 'EV', away });
       this.q('.clock small').innerHTML = `${live ? 'Now' : 'Earlier today'}${r.buy[i] == null ? '' : `<br>${eur(r.buy[i], 3)} per kWh`}`;
     }
-    this.q('.clock time').textContent = hhmm(Math.floor(t * 12) / 12);
+    const clock = hhmm(Math.floor(t * 12) / 12), timeEl = this.q('.clock time');
+    if (timeEl.textContent !== clock) timeEl.textContent = clock;
     this.chart && this.chart.playhead(t);
     const month = now.getMonth(), { rise, set } = daylight(month);
     this.scene.update({

@@ -258,7 +258,8 @@ export function createScene(container, { maxPixelRatio = 2 } = {}) {
       tmp.set(...LABEL_AT[key]);
       if (key === 'ev' && car.visible) tmp.z = Math.min(car.position.z, 8);
       tmp.project(camera);
-      el.style.transform = `translate(-50%,-100%) translate(${((tmp.x + 1) / 2) * w}px,${((1 - tmp.y) / 2) * h}px)`;
+      const tr = `translate(-50%,-100%) translate(${(((tmp.x + 1) / 2) * w).toFixed(1)}px,${(((1 - tmp.y) / 2) * h).toFixed(1)}px)`;
+      if (el.dataset.tr !== tr) el.style.transform = el.dataset.tr = tr; // unchanged writes still cost a restyle; style.transform reads back reformatted
     }
   }
 

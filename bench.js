@@ -21,7 +21,10 @@ const TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml',
 };
-const LAUNCHES = [
+// BENCH_GPU=1 uses the real GPU, like a tablet or Mac; the default software WebGL is slower but steadier between runs
+const LAUNCHES = process.env.BENCH_GPU ? [
+  { label: 'channel chrome + hardware GPU', options: { channel: 'chrome', headless: true, args: ['--enable-gpu', '--ignore-gpu-blocklist', '--use-angle=metal'] } },
+] : [
   { label: 'channel chrome + swiftshader flags', options: { channel: 'chrome', headless: true, args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'] } },
   { label: 'channel chrome, no args', options: { channel: 'chrome', headless: true } },
 ];
@@ -98,13 +101,14 @@ async function runOnce(browser, browserCdp, url, first) {
 
     const procStart = (await browserCdp.send('SystemInfo.getProcessInfo')).processInfo;
     const metStart = metricMap(await cdp.send('Performance.getMetrics'));
-    const framesStart = await page.evaluate(() => window.__frames);
+    const frameCount = () => page.evaluate(() => document.querySelector('energy-scene-card')?.frames ?? window.__frames);
+    const framesStart = await frameCount();
     const t0 = performance.now();
 
     await sleep(WINDOW_MS);
 
     const t1 = performance.now();
-    const framesEnd = await page.evaluate(() => window.__frames);
+    const framesEnd = await frameCount();
     const procEnd = (await browserCdp.send('SystemInfo.getProcessInfo')).processInfo;
     const metEnd = metricMap(await cdp.send('Performance.getMetrics'));
     await cdp.send('HeapProfiler.collectGarbage');
