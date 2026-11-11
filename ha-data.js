@@ -30,6 +30,13 @@ export function checkConfig(config) {
   if (config.cheapest_hours !== undefined && !(Number.isInteger(config.cheapest_hours) && config.cheapest_hours >= 0 && config.cheapest_hours <= 24)) {
     throw new Error('cheapest_hours must be a whole number from 0 to 24.');
   }
+  if (config.quality !== undefined && !['high', 'low'].includes(config.quality)) throw new Error('quality must be high or low.');
+  const isAction = (a) => a === undefined || (a && typeof a === 'object' && typeof a.action === 'string');
+  if (!isAction(config.tap_action) || !isAction(config.hold_action)) throw new Error('tap_action and hold_action need an "action:", like more-info or navigate.');
+  for (const [k, v] of Object.entries(config.actions ?? {})) {
+    if (!ACTION_KEYS.includes(k)) throw new Error(`actions can set ${ACTION_KEYS.join(', ')}, not "${k}".`);
+    if (!isAction(v?.tap_action) || !isAction(v?.hold_action)) throw new Error(`actions.${k} needs tap_action or hold_action with an "action:".`);
+  }
   for (const k of ['height', 'solar_kwp']) {
     if (config[k] !== undefined && !(Number(config[k]) > 0)) throw new Error(`${k} must be a positive number.`);
   }
@@ -122,7 +129,7 @@ export function guessEntities(states) {
 }
 
 // The editor form is flat; the card config keeps sensors under entities.
-const OPTION_KEYS = ['invert', 'ev_name', 'solar_kwp', 'height', 'chart'];
+const OPTION_KEYS = ['invert', 'ev_name', 'solar_kwp', 'height', 'chart', 'totals', 'cheapest_hours', 'quality', 'tap_action', 'hold_action'];
 export const toFormData = (config) => ({ ...config.entities, ...Object.fromEntries(OPTION_KEYS.map((k) => [k, config[k]])) });
 export function fromFormData(data, config) {
   const out = { ...config, entities: {} };
@@ -217,3 +224,8 @@ export function sunHours(st) {
   const rise = hour(st?.attributes?.next_rising), set = hour(st?.attributes?.next_setting);
   return rise != null && set != null && set > rise ? { rise, set } : null;
 }
+
+// The Home Assistant action for a tap or hold on a label (solar, home, grid, battery, ev) or a device:
+// per-label config first, then the card-wide one. null means the card's default (tap opens details).
+export const ACTION_KEYS = ['solar', 'home', 'grid', 'battery', 'ev'];
+export const actionFor = (config, key, kind) => config.actions?.[key]?.[`${kind}_action`] ?? config[`${kind}_action`] ?? null;

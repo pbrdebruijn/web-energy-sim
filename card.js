@@ -3,7 +3,7 @@
 import { createScene } from './scene.js';
 import { daylight, N, DT } from './sim.js';
 import { createChart, renderLabels, UI_CSS, hhmm, esc, kwh, pct, fmt, tr, setLocale } from './ui.js';
-import { checkConfig, toValue, weatherFactor, historyPoints, bucket, pricesFromAttribute, buildDay, guessEntities, toFormData, fromFormData, POWER_KEYS, entitiesFromEnergyPrefs, devicesFromEnergyPrefs, energyStatsFromPrefs, dayTotals, forecastSlots, cheapestHours, sunHours } from './ha-data.js';
+import { checkConfig, toValue, weatherFactor, historyPoints, bucket, pricesFromAttribute, buildDay, guessEntities, toFormData, fromFormData, POWER_KEYS, entitiesFromEnergyPrefs, devicesFromEnergyPrefs, energyStatsFromPrefs, dayTotals, forecastSlots, cheapestHours, sunHours, actionFor } from './ha-data.js';
 
 const LABEL_ENTITY = { solar: 'solar', home: 'home', grid: 'grid', batt: 'battery', ev: 'ev' };
 const HISTORY_EVERY = 5 * 60e3, CHART_EVERY = 5e3, SCRUB_HOLD = 15e3;
@@ -27,6 +27,16 @@ ha-card { overflow: hidden; }
 .totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; padding: 10px 14px 0; }
 .totals div { background: var(--secondary-background-color, rgba(127, 127, 127, .12)); border-radius: 8px; padding: 6px 10px; font-size: 12px; color: var(--ink2); }
 .totals b { display: block; font-size: 17px; color: var(--ink); font-variant-numeric: tabular-nums; }
+/* Narrow cards: smaller labels with only the main number */
+.stage { container-type: inline-size; }
+@container (max-width: 480px) {
+  .tag { font-size: 10px; padding: 2px 6px; }
+  .tag b { font-size: 12px; }
+  .tag .mix, .tag .soc { display: none; }
+  .devices button { font-size: 10px; padding: 2px 6px; }
+  .clock time { font-size: 15px; }
+  .clock small { display: none; }
+}
 .warn { margin: 0; padding: 8px 14px; color: var(--error-color, #db4437); font-size: 13px; }
 `;
 
@@ -63,7 +73,7 @@ class EnergySceneCard extends HTMLElement {
   }
 
   getCardSize() { return Math.ceil(this.height / 50) + (this.config.chart === false ? 0 : 6); }
-  getGridOptions() { return { columns: 12, min_columns: 6 }; }
+  getGridOptions() { return { columns: 12, min_columns: 3 }; }
 
   get height() { return Number(this.config.height ?? 420); }
   // Sensors from the Energy dashboard, overridden by the card config
@@ -100,21 +110,24 @@ class EnergySceneCard extends HTMLElement {
     </ha-card>`;
     const q = (s) => root.querySelector(s);
     this.q = q;
+    const low = this.config.quality === 'low';
+    // Reduced motion stops the animation and redraws once a second; low quality drops shadows and sharpness for old tablets
+    this.still = matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    this.frameMs = this.still ? 1000 : low ? 1000 / 20 - 2 : FRAME_MS;
     // Fill cost scales with pixel count, and 1.5 still looks sharp at card size
-    this.scene = createScene(q('.stage'), { maxPixelRatio: 1.5, devices: this.devices });
+    this.scene = createScene(q('.stage'), { maxPixelRatio: low ? 1 : 1.5, shadows: !low, devices: this.devices });
     for (const [key, el] of Object.entries(this.scene.labels)) {
-      const entityId = e[LABEL_ENTITY[key]];
-      if (!entityId) continue;
+      const actionKey = LABEL_ENTITY[key], entityId = e[actionKey];
+      if (!entityId && !actionFor(this.config, actionKey, 'tap')) continue;
       el.tabIndex = 0;
       el.setAttribute('role', 'button');
       el.title = tr('Show details and history');
-      const open = () => this.moreInfo(entityId);
-      el.onclick = open;
-      el.onkeydown = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } };
+      this.bind(el, actionKey, entityId);
+      el.onkeydown = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); this.act(actionKey, entityId, 'tap'); } };
     }
     // Device chips: one button each, filled in by frame()
     q('.devices').innerHTML = this.devices.map((d, k) => `<button data-k="${k}" title="${tr('Show details and history')}"></button>`).join('');
-    q('.devices').onclick = (ev) => { const b = ev.target.closest('button'); if (b) this.moreInfo(this.devices[b.dataset.k].entity); };
+    q('.devices').querySelectorAll('button').forEach((b, k) => this.bind(b, 'device', this.devices[k].entity));
     this.show = { batt: !!(e.battery || e.battery_soc), ev: !!(e.ev || e.ev_soc), price: !!e.price };
     this.chart = withChart && createChart({ svg: q('.chart'), tip: q('.tip'), legend: q('.legend'), box: q('.charts') }, (h) => {
       this.viewT = h;
@@ -148,6 +161,20 @@ class EnergySceneCard extends HTMLElement {
     this.ro?.disconnect();
     this.scene?.dispose();
     this.scene = this.chart = null;
+  }
+
+  // Tap and hold follow Home Assistant's tap_action and hold_action; without them a tap opens the details
+  bind(el, key, entityId) {
+    let timer, held = false;
+    el.onpointerdown = () => { held = false; timer = setTimeout(() => { held = true; this.act(key, entityId, 'hold'); }, 500); };
+    el.onpointerup = el.onpointerleave = el.onpointercancel = () => clearTimeout(timer);
+    el.onclick = () => { if (!held) this.act(key, entityId, 'tap'); };
+  }
+
+  act(key, entityId, kind) {
+    const action = actionFor(this.config, key, kind);
+    if (!action) { if (kind === 'tap' && entityId) this.moreInfo(entityId); return; }
+    this.dispatchEvent(new CustomEvent('hass-action', { bubbles: true, composed: true, detail: { config: { entity: entityId, [`${kind}_action`]: action }, action: kind } }));
   }
 
   moreInfo(entityId) {
@@ -269,7 +296,7 @@ class EnergySceneCard extends HTMLElement {
   frame = (ts) => {
     this.raf = 0;
     if (!this.scene || !this.visible) return;
-    if (ts - this.last < FRAME_MS) { this.raf = requestAnimationFrame(this.frame); return; }
+    if (ts - this.last < this.frameMs) { this.raf = requestAnimationFrame(this.frame); return; }
     this.frames = (this.frames ?? 0) + 1; // rendered frames, read by bench.js
     const dt = Math.min(0.1, (ts - this.last) / 1000);
     this.last = ts;
@@ -279,7 +306,7 @@ class EnergySceneCard extends HTMLElement {
     const t = live ? hourOf(now) : this.viewT;
     const i = Math.min(N - 1, Math.floor(t / DT));
     const r = this.r, away = r.evAway[i];
-    this.evAnim += ((away ? 1 : 0) - this.evAnim) * Math.min(1, dt * 1.5); // drive off and back in smoothly
+    this.evAnim = this.still ? +away : this.evAnim + ((away ? 1 : 0) - this.evAnim) * Math.min(1, dt * 1.5); // drive off and back in smoothly
 
     const key = `${i}/${this.version}/${live}`;
     if (key !== this.labelKey) {
@@ -299,7 +326,7 @@ class EnergySceneCard extends HTMLElement {
     this.scene.update({
       t, month, rise, set, weather: this.weather, kWp: Number(this.config.solar_kwp ?? 5.5),
       solar: r.solar[i] ?? 0, home: r.home[i] ?? 0, ev: r.ev[i] ?? 0, batt: r.batt[i] ?? 0, grid: r.grid[i] ?? 0,
-      battSoc: r.battSoc[i] ?? 0, battOn: this.show.batt, evOn: this.show.ev, evAway: this.evAnim, evPlugged: !away, devices: this.devValues,
+      battSoc: r.battSoc[i] ?? 0, battOn: this.show.batt, evOn: this.show.ev, evAway: this.evAnim, evPlugged: !away, devices: this.devValues, still: this.still,
     }, dt);
     this.raf = requestAnimationFrame(this.frame);
   };
@@ -325,6 +352,11 @@ const FIELDS = [
   ['solar_kwp', 'Solar peak power', 'Sets how many panels the roof shows', { number: { min: 0.5, max: 30, step: 0.5, unit_of_measurement: 'kWp', mode: 'box' } }],
   ['height', 'Scene height', null, { number: { min: 200, max: 1000, step: 10, unit_of_measurement: 'px', mode: 'box' } }],
   ['chart', 'Show the chart of today', null, { boolean: {} }],
+  ['totals', "Show today's totals", 'From the Energy dashboard', { boolean: {} }],
+  ['cheapest_hours', 'Cheapest hours to mark', 'In the price chart, from now to the end of the day. 0 turns it off', { number: { min: 0, max: 24, step: 1, mode: 'box' } }],
+  ['quality', 'Quality', 'Low drops shadows and sharpness, for older tablets', { select: { mode: 'dropdown', options: [{ value: 'high', label: 'High' }, { value: 'low', label: 'Low' }] } }],
+  ['tap_action', 'Tap on a label', 'Default: show details and history', { ui_action: {} }],
+  ['hold_action', 'Hold on a label', null, { ui_action: {} }],
 ];
 const SCHEMA = FIELDS.map(([name, , , selector]) => ({ name, selector }));
 const FIELD = Object.fromEntries(FIELDS.map((f) => [f[0], f]));
@@ -356,7 +388,7 @@ class EnergySceneCardEditor extends HTMLElement {
       });
       this.append(this.form);
     }
-    Object.assign(this.form, { hass: this._hass, schema: SCHEMA, data: { ...toFormData(this.config), chart: this.config.chart !== false } });
+    Object.assign(this.form, { hass: this._hass, schema: SCHEMA, data: { ...toFormData(this.config), chart: this.config.chart !== false, totals: this.config.totals !== false } });
   }
 }
 

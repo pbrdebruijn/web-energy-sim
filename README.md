@@ -16,6 +16,7 @@ What the card does:
 - The chart marks the cheapest hours still to come in green and negative prices in blue, and continues the solar line as a dashed forecast when the Energy dashboard has a solar forecast, such as Forecast.Solar.
 - Drag across the chart to replay earlier today in the scene. After 15 seconds the card returns to now.
 - The card only animates while it is on screen, so a wall tablet does not spend its battery on a hidden card.
+- If your device asks for reduced motion, the scene stops moving and only updates its numbers and the time of day. On narrow cards the labels get smaller and show only the main number.
 
 You don't need every device. Leave out the battery or the car and the card shows them as off.
 
@@ -79,10 +80,28 @@ Every sensor is optional. Sensors you leave out come from the Energy dashboard w
 | `height` | `420` | Height of the 3D scene in pixels. |
 | `chart` | `true` | Set to `false` to hide the chart of today. |
 | `cheapest_hours` | `3` | How many of the cheapest hours still to come the chart marks. `0` turns it off. |
+| `quality` | `high` | `low` turns off shadows, lowers sharpness and frame rate, for older tablets. |
+| `tap_action`, `hold_action` | tap shows details | Standard Home Assistant actions for a tap or hold on any label, like `navigate` to the Energy dashboard. |
+| `actions` | none | Actions per label: `solar`, `home`, `grid`, `battery` or `ev`, each with its own `tap_action` and `hold_action`. For example a hold on the car that toggles the charger. |
 | `totals` | `true` | Set to `false` to hide today's totals. They only show when the Energy dashboard has energy meters. |
 | `solar_kwp` | `5.5` | Your solar peak power in kWp. The scene shows one panel per 0.45 kWp, and the panels glow by output against this number. |
 | `ev_name` | `EV` | Name on the car's label. |
 | `devices` | from the Energy dashboard | Extra devices to show, see below. |
+
+### Actions
+
+```yaml
+tap_action:
+  action: navigate
+  navigation_path: /energy
+actions:
+  ev:
+    hold_action:
+      action: perform-action
+      perform_action: switch.toggle
+      target:
+        entity_id: switch.wallbox
+```
 
 ### Devices
 

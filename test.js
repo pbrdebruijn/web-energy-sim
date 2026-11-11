@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { simulate, buyPrice, SAMPLE, N, sources } from './sim.js';
-import { bucket, toValue, checkConfig, buildDay, pricesFromAttribute, guessEntities, toFormData, fromFormData, entitiesFromEnergyPrefs, devicesFromEnergyPrefs, energyStatsFromPrefs, dayTotals, forecastSlots, cheapestHours, sunHours } from './ha-data.js';
+import { bucket, toValue, checkConfig, buildDay, pricesFromAttribute, guessEntities, toFormData, fromFormData, entitiesFromEnergyPrefs, devicesFromEnergyPrefs, energyStatsFromPrefs, dayTotals, forecastSlots, cheapestHours, sunHours, actionFor } from './ha-data.js';
 
 const base = {
   yearlyKwh: 3500, month: 5, kWp: 6, weather: 1, saldering: true,
@@ -147,6 +147,15 @@ assert.ok(!cheapestHours(prices, 2.5, 24).has(1), 'past hours are not offered');
 const at = (h, m) => new Date(2026, 5, 2, h, m).toISOString();
 assert.deepEqual(sunHours({ attributes: { next_rising: at(5, 15), next_setting: at(22, 0) } }), { rise: 5.25, set: 22 }, 'sun hours');
 assert.equal(sunHours(undefined), null, 'no sun.sun');
+
+// Tap and hold: per-label action first, then the card-wide one, else the default (null)
+const acfg = { tap_action: { action: 'navigate', navigation_path: '/energy' }, actions: { ev: { tap_action: { action: 'toggle' } } } };
+assert.equal(actionFor(acfg, 'ev', 'tap').action, 'toggle', 'per-label action');
+assert.equal(actionFor(acfg, 'grid', 'tap').action, 'navigate', 'card-wide action');
+assert.equal(actionFor(acfg, 'grid', 'hold'), null, 'default');
+checkConfig({ quality: 'low', ...acfg });
+assert.throws(() => checkConfig({ actions: { roof: { tap_action: { action: 'none' } } } }), /actions can set/);
+assert.throws(() => checkConfig({ tap_action: 'more-info' }), /need an "action:"/);
 
 // The car name from the config is text, never markup
 const { renderLabels } = await import('./ui.js');

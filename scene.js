@@ -20,10 +20,10 @@ const PARTICLES = 16;
 const DEVICE_X = [-0.75, 1.25, -5.3, -3.5]; // spots along the front wall, clear of the door and path
 const DOT = Object.fromEntries(Object.entries(COLORS).map(([k, c]) => [k, new THREE.Color(c)]));
 
-export function createScene(container, { maxPixelRatio = 2, devices = [] } = {}) {
+export function createScene(container, { maxPixelRatio = 2, devices = [], shadows = true } = {}) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, maxPixelRatio));
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = shadows;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   container.prepend(renderer.domElement);
 
@@ -233,8 +233,9 @@ export function createScene(container, { maxPixelRatio = 2, devices = [] } = {})
   const tmp = V(0, 0, 0);
   let clock = 0;
 
-  // s: { t, month, rise, set, weather, kWp, solar, home, ev, batt, grid, battSoc, battOn, evOn, evAway (0 parked..1 gone), evPlugged, devices: [kW] }
+  // s: { t, month, rise, set, weather, kWp, solar, home, ev, batt, grid, battSoc, battOn, evOn, evAway (0 parked..1 gone), evPlugged, devices: [kW], still }
   function update(s, dt) {
+    if (s.still) dt = 0; // reduced motion: everything keeps its place, only the time of day and the numbers change
     clock += dt;
     const dayLen = s.set - s.rise;
     const th = s.t >= s.rise && s.t <= s.set
