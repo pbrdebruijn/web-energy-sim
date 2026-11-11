@@ -173,7 +173,8 @@ export function createScene(container) {
     camera.fov = 2 * THREE.MathUtils.radToDeg(Math.atan(Math.tan(THREE.MathUtils.degToRad(16)) * Math.max(1, 1.2 / camera.aspect)));
     camera.updateProjectionMatrix();
   };
-  new ResizeObserver(resize).observe(container);
+  const observer = new ResizeObserver(resize);
+  observer.observe(container);
   resize();
 
   const seasons = createSeasons({ scene, add, box, mat, grassMat, coneMat });
@@ -237,5 +238,15 @@ export function createScene(container) {
     }
   }
 
-  return { update, labels };
+  // Frees the WebGL context; browsers allow only a few at once, and dashboards create and drop cards often.
+  function dispose() {
+    observer.disconnect();
+    controls.dispose();
+    renderer.dispose();
+    renderer.forceContextLoss();
+    renderer.domElement.remove();
+    for (const el of Object.values(labels)) el.remove();
+  }
+
+  return { update, labels, dispose };
 }

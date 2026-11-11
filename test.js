@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { simulate, buyPrice, SAMPLE, N } from './sim.js';
+import { bucket, toValue, checkConfig, buildDay, pricesFromAttribute } from './ha-data.js';
 
 const base = {
   yearlyKwh: 3500, month: 5, kWp: 6, weather: 1, saldering: true,
@@ -41,3 +42,34 @@ console.log('ok', { direct: direct.totals.netPrice.toFixed(3), cheap: cheap.tota
 const noon = simulate({ ...base, ev: { ...base.ev, from: 12, until: 16, mode: 'cheap' } }, SAMPLE.summer);
 assert.ok(noon.ev.every((p, i) => p === 0 || (i >= 48 && i < 64)), 'charging stays inside the afternoon slot');
 close(noon.totals.evStored, 50 * 0.165, 'afternoon slot recharges the daily driving');
+
+// ---- Home Assistant card data ----
+// Each state holds until the next one; a slot averages them by time. Slots after "now" stay empty.
+const H = 3600e3, start = Date.UTC(2026, 0, 1);
+const b = bucket([{ t: start - H, v: 2 }, { t: start + 0.1 * H, v: 4 }, { t: start + 0.2 * H, v: null }, { t: start + 0.5 * H, v: 1 }], start, start + 0.6 * H);
+close(b[0], (2 * 0.1 + 4 * 0.1) / 0.2, 'first slot averages the two known states, the unavailable stretch is left out');
+assert.equal(b[1], null, 'slot with only an unavailable state is empty');
+close(b[2], 1, 'state carries on into the next slot');
+assert.equal(b[3], null, 'slots after now are empty');
+
+close(toValue('solar', '2500', 'W'), 2.5, 'W becomes kW');
+close(toValue('battery', '1.2', 'kW', true), -1.2, 'invert flips the sign');
+close(toValue('battery_soc', '80', '%'), 0.8, 'charge level becomes 0..1');
+close(toValue('price', '25.1', 'ct/kWh'), 0.251, 'cents become euros');
+assert.equal(toValue('grid', 'unavailable', 'kW'), null, 'unavailable is unknown, not zero');
+assert.equal(toValue('ev_plugged', 'off'), 0, 'unplugged');
+
+assert.throws(() => checkConfig({}), /entities/);
+assert.throws(() => checkConfig({ entities: { solar: 'sensor.a' } }), /grid is required/);
+assert.throws(() => checkConfig({ entities: { grid: 'sensor.a', sun: 'sensor.b' } }), /Unknown entities.sun/);
+assert.throws(() => checkConfig({ entities: { grid: 'not an id' } }), /entity id/);
+assert.throws(() => checkConfig({ entities: { grid: 'sensor.a' }, invert: ['price'] }), /invert/);
+checkConfig({ entities: { grid: 'sensor.a', battery: 'sensor.b' }, invert: ['battery'], height: 400 });
+
+const fill = (v) => new Array(N).fill(v);
+const day = buildDay({ solar: fill(3), grid: fill(-1), battery: fill(-0.5), ev: fill(1) });
+close(day.home[0], 0.5, 'home use follows from the balance: 3 - 1 - 0.5 - 1');
+assert.equal(day.evAway[0], false, 'without a plugged-in sensor the car stays home');
+assert.equal(pricesFromAttribute([1, 2]), null, 'odd price lists are ignored');
+assert.equal(pricesFromAttribute([...Array(24).keys()])[5], 1, 'hourly prices fill four quarters each');
+console.log('ok card data');

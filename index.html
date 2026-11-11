@@ -24,32 +24,9 @@ body { background: var(--page); color: var(--ink); font: 14px/1.4 system-ui, -ap
 main { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; height: 100vh; }
 #stage { position: relative; overflow: hidden; min-height: 280px; }
 #stage canvas { display: block; }
-.tag { position: absolute; left: 0; top: 0; cursor: pointer; user-select: none; white-space: nowrap; text-align: center;
-  background: rgba(26, 26, 25, .88); border: 1px solid rgba(255, 255, 255, .1); border-bottom: 3px solid var(--c);
-  border-radius: 8px; padding: 4px 9px; font-size: 12px; color: var(--ink2); }
-.tag:hover, .tag:focus-visible { border-color: var(--c); outline: none; }
-.tag.active { box-shadow: 0 0 0 2px var(--c); }
-.tag.off { opacity: .6; }
-.tag b { display: block; color: var(--ink); font-size: 14px; }
-.tag .soc { display: block; height: 4px; margin-top: 3px; border-radius: 2px; background: var(--axis); }
-.tag .soc i { display: block; height: 100%; border-radius: 2px; background: var(--c); }
-#clock { position: absolute; left: 16px; bottom: 16px; z-index: 1; display: flex; gap: 10px; align-items: center;
-  background: rgba(26, 26, 25, .88); border: 1px solid rgba(255, 255, 255, .1); border-radius: 10px; padding: 8px 12px; }
-#clock time { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
-#clock small { color: var(--ink2); white-space: nowrap; line-height: 1.25; }
 button { font: inherit; color: var(--ink); background: var(--axis); border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
 button:hover { background: #4a4a46; }
 #charts { background: var(--surface); border-top: 1px solid var(--hair); padding: 10px 14px 6px; position: relative; }
-#legend { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--ink2); font-size: 12px; margin-bottom: 4px; }
-#legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; }
-#chart { display: block; width: 100%; cursor: crosshair; touch-action: none; }
-#chart text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-#chart .title { fill: var(--ink2); }
-#tip { position: absolute; pointer-events: none; background: #0d0d0d; border: 1px solid var(--axis); border-radius: 8px;
-  padding: 8px 10px; font-size: 12px; color: var(--ink2); display: none; z-index: 2; min-width: 170px; }
-#tip b { color: var(--ink); }
-#tip div { display: flex; justify-content: space-between; gap: 14px; }
-#tip i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
 #pop { position: absolute; z-index: 3; width: 300px; max-width: calc(100% - 16px); max-height: calc(100% - 16px); overflow-y: auto;
   background: var(--surface); border: 1px solid var(--axis); border-radius: 10px; padding: 0 14px 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, .5); }
 #pop h2 { border-top: 0; margin-top: 10px; padding-top: 0; }
@@ -106,7 +83,7 @@ dt i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margi
 <body>
 <main>
   <div id="stage">
-    <div id="clock">
+    <div id="clock" class="clock">
       <button id="play" aria-label="Pause">❚❚</button>
       <time id="time">00:00</time>
       <small id="now"></small>
@@ -120,9 +97,9 @@ dt i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margi
     </div>
   </div>
   <section id="charts">
-    <div id="legend"></div>
-    <svg id="chart" role="img" aria-label="Price, power and charge level over the day"></svg>
-    <div id="tip"></div>
+    <div id="legend" class="legend"></div>
+    <svg id="chart" class="chart" role="img" aria-label="Price, power and charge level over the day"></svg>
+    <div id="tip" class="tip"></div>
   </section>
 </main>
 <aside id="settings">

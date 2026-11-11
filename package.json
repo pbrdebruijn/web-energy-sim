@@ -4,6 +4,11 @@
   "type": "module",
   "scripts": {
     "start": "python3 -m http.server 5173",
-    "test": "node test.js"
+    "test": "node test.js",
+    "build": "esbuild card.js --bundle --minify --format=esm --target=es2020 --legal-comments=none --outfile=dist/energy-scene-card.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "three": "^0.170.0"
   }
 }

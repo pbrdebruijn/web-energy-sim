@@ -1,5 +1,8 @@
 import { simulate, daylight, SAMPLE, N, DT } from './sim.js';
 import { createScene, COLORS } from './scene.js';
+import { createChart, renderLabels, UI_CSS, hhmm, eur, kwh, pct, dot } from './ui.js';
+
+document.head.append(Object.assign(document.createElement('style'), { textContent: UI_CSS }));
 
 const $ = (id) => document.getElementById(id);
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -83,12 +86,7 @@ function restoreCfg(hash) {
 }
 const shared = restoreCfg(location.hash);
 
-const hhmm = (h) => `${String(Math.floor(h) % 24).padStart(2, '0')}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
 const fmt = (c, v) => c.unit === 'h' ? hhmm(v) : `${+(v * c.k).toFixed(2)} ${c.unit}`;
-const eur = (v, d = 2) => `${v < 0 ? '-' : ''}€${Math.abs(v).toFixed(d)}`;
-const kwh = (v) => `${v.toFixed(1)} kWh`;
-const pct = (v) => `${Math.round(v * 100)}%`;
-const dot = (c) => `<i style="background:${c}"></i>`;
 
 const control = (c) => c.check
   ? `<label class="check"><input type="checkbox" data-p="${c.p}" ${get(c.p) ? 'checked' : ''}>${c.label}</label>`
@@ -225,87 +223,16 @@ function renderResults() {
     ${priceNote ? `<p class="note">${priceNote}</p>` : ''}`;
 }
 
-// ---- Chart: three small multiples on one time axis ----
-const svg = $('chart'), tip = $('tip');
-const ML = 46, MR = 22;
-const ROWS = [['Price you pay, € per kWh', 60], ['Power, kW. Grid below zero is export', 104], ['Charge level, %', 52]];
-const CH = ROWS.reduce((a, [, h]) => a + h + 24, 0) + 16;
-let PW = 0;
-const xOf = (t) => ML + (t / 24) * PW;
-const SERIES = () => [
-  ['solar', 'Solar', r.solar, true], ['home', 'Home', r.home, true], ['ev', 'EV', r.ev, cfg.ev.on],
-  ['batt', 'Battery', r.batt, false], ['grid', 'Grid', r.grid, true],
-];
-
-$('legend').innerHTML = `<span>${dot('#898781')}Price</span>` + ['solar', 'home', 'ev', 'batt', 'grid']
-  .map((k) => `<span>${dot(COLORS[k])}${{ solar: 'Solar', home: 'Home use', ev: 'EV', batt: 'Home battery', grid: 'Grid' }[k]}</span>`).join('');
-
-function drawChart() {
-  const W = svg.clientWidth;
-  if (!W) return; // hidden on phones until the Chart button opens it
-  PW = W - ML - MR;
-  svg.setAttribute('height', CH);
-  svg.setAttribute('viewBox', `0 0 ${W} ${CH}`);
-  let y = 0, s = '';
-  const row = (i, min, max, ticks, f) => {
-    const [title, h] = ROWS[i], top = y + 18;
-    const yOf = (v) => top + h - ((v - min) / (max - min || 1)) * h;
-    s += `<text class="title" x="${ML}" y="${y + 11}">${title}</text>`;
-    for (const v of ticks) s += `<line x1="${ML}" x2="${W - MR}" y1="${yOf(v)}" y2="${yOf(v)}" stroke="${v === 0 ? '#383835' : '#2c2c2a'}"/>
-      <text x="${ML - 6}" y="${yOf(v) + 4}" text-anchor="end">${f(v)}</text>`;
-    y = top + h + 6;
-    return yOf;
-  };
-  const line = (data, yOf, color) => `<path fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" d="M${data.map((v, i) => `${xOf((i + 0.5) * DT).toFixed(1)},${yOf(v).toFixed(1)}`).join('L')}"/>`;
-
-  const hourly = [...Array(24).keys()].map((h) => r.buy[h * 4]);
-  const pMin = Math.min(0, ...hourly), pMax = Math.max(...hourly);
-  let yOf = row(0, pMin, pMax, pMin < 0 ? [pMin, 0, pMax] : [0, pMax], (v) => v.toFixed(2));
-  hourly.forEach((p, h) => {
-    const a = yOf(Math.max(p, 0)), b = yOf(Math.min(p, 0));
-    s += `<rect x="${xOf(h) + 1}" y="${a}" width="${PW / 24 - 2}" height="${Math.max(1, b - a)}" rx="2" fill="#898781"/>`;
-  });
-
-  const lines = SERIES().filter((x) => x[3]);
-  const all = lines.flatMap((x) => x[2]);
-  const kMin = Math.min(0, ...all), kMax = Math.max(1, ...all);
-  yOf = row(1, kMin, kMax, kMin < -0.08 * kMax ? [kMin, 0, kMax] : [0, kMax], (v) => v.toFixed(1));
-  for (const [k, , data] of lines) s += line(data, yOf, COLORS[k]);
-
-  yOf = row(2, 0, 100, [0, 50, 100], (v) => v);
-  if (cfg.batt.on) s += line(r.battSoc.map((v) => v * 100), yOf, COLORS.batt);
-  if (cfg.ev.on) s += line(r.evSoc.map((v) => v * 100), yOf, COLORS.ev);
-
-  for (let h = 0; h <= 24; h += 3) s += `<text x="${xOf(h)}" y="${y + 10}" text-anchor="middle">${hhmm(h)}</text>`;
-  s += `<line id="cross" y1="0" y2="${y}" stroke="#898781" stroke-dasharray="3 3" visibility="hidden"/>
-    <line id="ph" y1="0" y2="${y}" stroke="#f0efec" stroke-width="1.5"/>`;
-  svg.innerHTML = s;
-}
-
-const chartT = (e) => Math.min(23.999, Math.max(0, ((e.clientX - svg.getBoundingClientRect().left - ML) / PW) * 24));
-svg.addEventListener('pointerdown', (e) => { svg.setPointerCapture(e.pointerId); t = chartT(e); });
-svg.addEventListener('pointermove', (e) => {
-  const ht = chartT(e), i = Math.floor(ht / DT);
-  if (e.buttons) t = ht;
-  const cross = $('cross');
-  cross.setAttribute('x1', xOf(ht)); cross.setAttribute('x2', xOf(ht)); cross.setAttribute('visibility', 'visible');
-  const line = (k, label, v) => `<div><span>${k ? dot(COLORS[k]) : ''}${label}</span><b>${v}</b></div>`;
-  tip.innerHTML = `<b>${hhmm(i * DT)}</b>${line(null, 'Buy price', eur(r.buy[i], 3))}${line(null, 'Export price', eur(r.sell[i], 3))}`
-    + SERIES().map(([k, label, d]) => line(k, k === 'grid' ? (d[i] < 0 ? 'Grid export' : 'Grid import') : k === 'batt' ? (d[i] < 0 ? 'Battery charging' : 'Battery output') : label, `${Math.abs(d[i]).toFixed(2)} kW`)).join('')
-    + (cfg.batt.on ? line('batt', 'Battery level', pct(r.battSoc[i])) : '') + (cfg.ev.on ? line('ev', 'Car level', pct(r.evSoc[i])) : '');
-  tip.style.display = 'block';
-  const box = $('charts').getBoundingClientRect();
-  tip.style.left = `${Math.min(e.clientX - box.left + 14, box.width - tip.offsetWidth - 8)}px`;
-  tip.style.top = `${Math.max(-tip.offsetHeight + 40, e.clientY - box.top - tip.offsetHeight - 10)}px`;
-});
-svg.addEventListener('pointerleave', () => { tip.style.display = 'none'; $('cross').setAttribute('visibility', 'hidden'); });
-addEventListener('resize', drawChart);
+// ---- Chart ----
+const chart = createChart({ svg: $('chart'), tip: $('tip'), legend: $('legend'), box: $('charts') }, (h) => { t = h; });
+const drawChart = () => chart.draw(r, { batt: cfg.batt.on, ev: cfg.ev.on });
+addEventListener('resize', () => chart.draw());
 
 // ---- Phone layout: chart and settings start hidden and open from the buttons on the scene ----
 const togglePanel = (name, on = !document.body.classList.contains(`show-${name}`)) => {
   document.body.classList.toggle(`show-${name}`, on);
   document.querySelector(`[data-panel=${name}]`).setAttribute('aria-expanded', on);
-  if (name === 'chart' && on) drawChart(); // the svg has no width while hidden
+  if (name === 'chart' && on) chart.draw(); // the svg has no width while hidden
 };
 $('toggles').addEventListener('click', (e) => { const b = e.target.closest('[data-panel]'); if (b) togglePanel(b.dataset.panel); });
 $('closeSettings').onclick = () => togglePanel('settings', false);
@@ -330,21 +257,6 @@ $('play').onclick = () => {
 };
 $('speed').onclick = () => { speed = { 1: 4, 4: 12, 12: 1 }[speed]; $('speed').textContent = `${speed}x`; };
 
-function renderLabels(i, away) {
-  const L = scene.labels, bar = (v) => `<span class="soc"><i style="width:${v * 100}%"></i></span>`;
-  const kw = (v) => `${Math.abs(v).toFixed(1)} kW`;
-  L.solar.innerHTML = `Solar<b>${kw(r.solar[i])}</b>`;
-  L.home.innerHTML = `Home use<b>${kw(r.home[i])}</b>`;
-  L.grid.innerHTML = `Grid, ${r.grid[i] < -0.03 ? 'exporting' : r.grid[i] > 0.03 ? 'importing' : 'idle'}<b>${kw(r.grid[i])}</b>${eur(r.grid[i] < 0 ? r.sell[i] : r.buy[i], 3)} per kWh`;
-  L.batt.classList.toggle('off', !cfg.batt.on);
-  L.ev.classList.toggle('off', !cfg.ev.on);
-  if (!cfg.batt.on) L.batt.innerHTML = 'Home battery<b>Off</b>';
-  else L.batt.innerHTML = `Battery, ${r.batt[i] > 0.03 ? 'discharging' : r.batt[i] < -0.03 ? 'charging' : 'idle'}<b>${kw(r.batt[i])}</b>${bar(r.battSoc[i])}${pct(r.battSoc[i])}`;
-  if (!cfg.ev.on) L.ev.innerHTML = 'Model Y<b>Off</b>';
-  else L.ev.innerHTML = `Model Y, ${away ? 'on the road' : r.ev[i] > 0.03 ? 'charging' : 'plugged in'}<b>${away ? pct(r.evSoc[i]) : kw(r.ev[i])}</b>${bar(r.evSoc[i])}${away ? '' : pct(r.evSoc[i])}`;
-  $('now').innerHTML = `Buy ${eur(r.buy[i], 3)}<br>Export ${eur(r.sell[i], 3)}`;
-}
-
 function frame(ts) {
   const dt = Math.min(0.1, (ts - last) / 1000);
   last = ts;
@@ -354,10 +266,13 @@ function frame(ts) {
   // The car takes half an hour of simulated time to pull out or roll back in.
   const evAway = away ? Math.min(1, ((t - cfg.ev.until + 24) % 24) / 0.5, ((cfg.ev.from - t + 24) % 24) / 0.5) : 0;
   const key = `${i}/${version}`;
-  if (key !== labelKey) { labelKey = key; renderLabels(i, away); }
+  if (key !== labelKey) {
+    labelKey = key;
+    renderLabels(scene.labels, r, i, { batt: cfg.batt.on, ev: cfg.ev.on, evName: 'Model Y', away });
+    $('now').innerHTML = `Buy ${eur(r.buy[i], 3)}<br>Export ${eur(r.sell[i], 3)}`;
+  }
   $('time').textContent = hhmm(Math.floor(t * 12) / 12);
-  const ph = $('ph'); // missing until the chart is first drawn
-  if (ph) { ph.setAttribute('x1', xOf(t)); ph.setAttribute('x2', xOf(t)); }
+  chart.playhead(t);
   scene.update({
     t, month: cfg.month, rise, set: sunset, weather: cfg.weather, kWp: cfg.kWp,
     solar: r.solar[i], home: r.home[i], ev: r.ev[i], batt: r.batt[i], grid: r.grid[i],

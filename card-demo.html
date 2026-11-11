@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Energy scene card demo</title>
+<style>
+  body { margin: 0; padding: 16px; background: #111; font: 14px system-ui, sans-serif; color: #ddd; }
+  body.light { background: #f5f5f5; color: #222; --primary-text-color: #212121; --secondary-text-color: #727272; --divider-color: #e0e0e0; }
+  body.light { --card-background-color: #fff; }
+  main { max-width: 900px; margin: auto; }
+  p { color: #888; }
+</style>
+</head>
+<body>
+<main>
+  <p>Fake Home Assistant fed by the simulator. Add <code>?light</code> for a light theme. Clicked label: <span id="clicked">none</span></p>
+  <energy-scene-card></energy-scene-card>
+</main>
+<script type="module">
+// Development page for the card: runs dist/energy-scene-card.js against fake states and history from simulate().
+import { simulate, SAMPLE, N, DT } from './sim.js';
+import './dist/energy-scene-card.js';
+
+// Stand-in for Home Assistant's own ha-card element
+customElements.define('ha-card', class extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' }).innerHTML = '<style>:host { display: block; overflow: hidden; border-radius: 12px; background: var(--card-background-color, #1c1c1c); }</style><slot></slot>';
+  }
+});
+if (location.search.includes('light')) document.body.classList.add('light');
+const r = simulate({
+  yearlyKwh: 3500, month: new Date().getMonth(), kWp: 5.5, weather: 1, saldering: true,
+  batt: { on: true, kwh: 10, kw: 5, rte: 0.85, mode: 'smart', feedEv: true },
+  ev: { on: true, kwh: 75, cons: 16.5, km: 50, from: 18, until: 7.5, chargerKw: 11, eff: 0.9, target: 80, mode: 'cheap' },
+}, SAMPLE.summer);
+
+// Values as real integrations report them: solar in W, battery positive while charging (the config inverts it)
+const SENSORS = {
+  'sensor.solar_power': [(i) => Math.round(r.solar[i] * 1000), 'W'],
+  'sensor.grid_power': [(i) => r.grid[i].toFixed(3), 'kW'],
+  'sensor.battery_power': [(i) => (-r.batt[i]).toFixed(3), 'kW'],
+  'sensor.battery_level': [(i) => Math.round(r.battSoc[i] * 100), '%'],
+  'sensor.wallbox_power': [(i) => r.ev[i].toFixed(3), 'kW'],
+  'sensor.car_battery_level': [(i) => Math.round(r.evSoc[i] * 100), '%'],
+  'binary_sensor.car_plugged_in': [(i) => (r.evAway[i] ? 'off' : 'on'), ''],
+  'sensor.electricity_price': [(i) => r.buy[i].toFixed(4), '€/kWh'],
+};
+const start = new Date(); start.setHours(0, 0, 0, 0);
+const slotNow = () => Math.min(N - 1, Math.floor((Date.now() - start) / (DT * 3600e3)));
+
+const hass = () => {
+  const i = slotNow(), states = { 'weather.home': { state: 'sunny', attributes: {} } };
+  for (const [id, [f, unit]] of Object.entries(SENSORS)) {
+    states[id] = { state: String(f(i)), attributes: { unit_of_measurement: unit, ...(id.includes('price') ? { today: r.buy.filter((_, k) => k % 4 === 0) } : {}) } };
+  }
+  return {
+    states,
+    async callWS(msg) {
+      const out = {};
+      for (const id of msg.entity_ids) {
+        const [f] = SENSORS[id] ?? [() => 'unknown'];
+        out[id] = Array.from({ length: slotNow() + 1 }, (_, k) => ({ s: String(f(k)), lu: (+start + k * DT * 3600e3) / 1000 }));
+      }
+      return out;
+    },
+  };
+};
+
+const card = document.querySelector('energy-scene-card');
+card.setConfig({
+  ev_name: 'Model Y',
+  entities: {
+    solar: 'sensor.solar_power', grid: 'sensor.grid_power', battery: 'sensor.battery_power', battery_soc: 'sensor.battery_level',
+    ev: 'sensor.wallbox_power', ev_soc: 'sensor.car_battery_level', ev_plugged: 'binary_sensor.car_plugged_in',
+    price: 'sensor.electricity_price', weather: 'weather.home',
+  },
+  invert: ['battery'],
+});
+card.hass = hass();
+setInterval(() => { card.hass = hass(); }, 10000);
+addEventListener('hass-more-info', (e) => { document.getElementById('clicked').textContent = e.detail.entityId; });
+</script>
+</body>
+</html>
