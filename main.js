@@ -10,7 +10,7 @@ const cfg = {
   // Tesla Model Y Long Range: about 75 kWh usable, 16.5 kWh per 100 km in mixed driving
   ev: { on: true, kwh: 75, cons: 16.5, km: 50, from: 18, until: 7.5, chargerKw: 11, eff: 0.9, target: 80, mode: 'cheap' },
 };
-const get = (p) => p.split('.').reduce((o, k) => o[k], cfg);
+const get = (p, o = cfg) => p.split('.').reduce((x, k) => x[k], o);
 const set = (p, v) => { const ks = p.split('.'), last = ks.pop(); ks.reduce((o, k) => o[k], cfg)[last] = v; };
 
 const R = (p, label, min, max, step, unit, k = 1) => ({ p, label, min, max, step, unit, k });
@@ -49,16 +49,30 @@ const SECTIONS = [
 ];
 const ITEMS = Object.fromEntries(SECTIONS.flatMap((s) => s[3]).map((c) => [c.p, c]));
 
-// ---- Settings in the URL: #c=<base64url of the cfg JSON>, so a link restores every setting ----
-const encodeCfg = () => btoa(JSON.stringify(cfg)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+// ---- Settings in the URL: #month=7&batt.kwh=17&ev.on=0, only what differs from the defaults ----
+const DEFAULTS = structuredClone(cfg);
+const SHARED = [...Object.keys(ITEMS), 'batt.on', 'ev.on'];
+// month is always written: its default is the current month, which differs for whoever opens the link later
+const encodeCfg = () => SHARED.filter((p) => p === 'month' || get(p) !== get(p, DEFAULTS))
+  .map((p) => `${p}=${typeof get(p) === 'boolean' ? +get(p) : get(p)}`).join('&');
+
 // The hash comes from whoever shared the link: take only known settings of the right type, clamp ranges, check choices.
 function restoreCfg(hash) {
-  const m = hash.match(/^#c=([\w-]+)$/);
-  let s;
-  try { s = JSON.parse(atob(m[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch { return false; }
-  for (const p of [...Object.keys(ITEMS), 'batt.on', 'ev.on']) {
-    let v;
-    try { v = p.split('.').reduce((o, k) => o[k], s); } catch { continue; }
+  let read;
+  if (hash.startsWith('#c=')) { // older links: base64url JSON of the whole cfg
+    let o;
+    try { o = JSON.parse(atob(hash.slice(3).replace(/-/g, '+').replace(/_/g, '/'))); } catch { return false; }
+    read = (p) => { try { return get(p, o); } catch { return undefined; } };
+  } else {
+    const q = new URLSearchParams(hash.slice(1));
+    if (!q.size) return false;
+    read = (p) => {
+      const v = q.get(p), d = get(p);
+      return v === null ? undefined : typeof d === 'number' ? Number(v) : typeof d === 'boolean' ? { 1: true, 0: false }[v] : v;
+    };
+  }
+  for (const p of SHARED) {
+    let v = read(p);
     const c = ITEMS[p], d = get(p);
     if (typeof v !== typeof d || (typeof v === 'number' && !Number.isFinite(v))) continue;
     if (c?.opts && !c.opts.some(([x]) => x === v)) continue;
@@ -174,7 +188,7 @@ async function loadPrices(keepMonth = false) {
 function recompute() {
   r = simulate(cfg, spot);
   version++;
-  history.replaceState(null, '', `#c=${encodeCfg()}`);
+  history.replaceState(null, '', `#${encodeCfg()}`);
   renderResults();
   drawChart();
 }
@@ -356,11 +370,11 @@ recompute();
 requestAnimationFrame(frame);
 loadPrices(shared);
 
-$('share').onclick = async () => {
-  const url = location.href, b = $('share');
+for (const b of document.querySelectorAll('.share')) b.onclick = async () => {
+  const url = location.href, label = b.querySelector('span'), text = label.textContent;
   try {
     if (navigator.share) await navigator.share({ title: document.title, url });
-    else { await navigator.clipboard.writeText(url); b.textContent = 'Link copied'; setTimeout(() => (b.textContent = 'Copy link'), 1500); }
+    else { await navigator.clipboard.writeText(url); label.textContent = 'Link copied'; setTimeout(() => (label.textContent = text), 1500); }
   } catch (err) {
     if (err.name !== 'AbortError') prompt('Copy this link', url); // clipboard blocked: let the user copy it by hand
   }
