@@ -46,10 +46,6 @@ const SENSORS = {
   'sensor.car_battery_level': [(i) => Math.round(r.evSoc[i] * 100), '%'],
   'binary_sensor.car_plugged_in': [(i) => (r.evAway[i] ? 'off' : 'on'), ''],
   'sensor.electricity_price': [(i) => r.buy[i].toFixed(4), '€/kWh'],
-  'sensor.heat_pump_power': [(i) => Math.round(400 + 300 * Math.sin(i / 7)), 'W'],
-  'sensor.washer_power': [(i) => (i % 40 < 8 ? 1900 : 3), 'W'],
-  'sensor.boiler_power': [(i) => (i % 24 < 3 ? 2.2 : 0), 'kW'],
-  'sensor.ac_power': [(i) => (i > 50 && i < 70 ? 0.9 : 0), 'kW'],
 };
 // The Energy dashboard knows grid, solar and battery; the card config below only adds the car, price and weather
 const ENERGY_PREFS = { energy_sources: [
@@ -99,12 +95,6 @@ const hass = () => {
 const card = document.querySelector('energy-scene-card');
 card.setConfig({
   ev_name: 'Model Y',
-  devices: [
-    { entity: 'sensor.heat_pump_power', type: 'heat_pump', name: 'Heat pump' },
-    { entity: 'sensor.washer_power', type: 'washing_machine', name: 'Washer' },
-    { entity: 'sensor.boiler_power', type: 'boiler', name: 'Boiler' },
-    { entity: 'sensor.ac_power', type: 'ac', name: 'Airco' },
-  ],
   entities: {
     ev: 'sensor.wallbox_power', ev_soc: 'sensor.car_battery_level', ev_plugged: 'binary_sensor.car_plugged_in',
     price: 'sensor.electricity_price', weather: 'weather.home',

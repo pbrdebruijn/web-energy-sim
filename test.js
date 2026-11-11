@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { simulate, buyPrice, SAMPLE, N, sources } from './sim.js';
-import { bucket, toValue, checkConfig, buildDay, pricesFromAttributes, guessEntities, toFormData, fromFormData, entitiesFromEnergyPrefs, devicesFromEnergyPrefs, energyStatsFromPrefs, dayTotals, forecastSlots, cheapestHours, sunHours, actionFor } from './ha-data.js';
+import { bucket, toValue, checkConfig, buildDay, pricesFromAttributes, guessEntities, toFormData, fromFormData, entitiesFromEnergyPrefs, energyStatsFromPrefs, dayTotals, forecastSlots, cheapestHours, sunHours, actionFor } from './ha-data.js';
 
 const base = {
   yearlyKwh: 3500, month: 5, kWp: 6, weather: 1, saldering: true,
@@ -121,12 +121,7 @@ assert.deepEqual(entitiesFromEnergyPrefs({ energy_sources: [
 ] }), { grid: 'sensor.grid_power', solar: 'sensor.pv_power', battery_soc: 'sensor.batt_soc' }, 'energy dashboard sensors');
 assert.deepEqual(entitiesFromEnergyPrefs({ energy_sources: [{ type: 'grid', flow_from: [], power: [{ stat_rate: 'sensor.p1' }] }] }), { grid: 'sensor.p1' }, 'pre-2025 grid format');
 assert.deepEqual(entitiesFromEnergyPrefs(null), {}, 'no Energy dashboard');
-assert.deepEqual(devicesFromEnergyPrefs({ device_consumption: [
-  { stat_consumption: 'sensor.hp_energy', stat_rate: 'sensor.hp_power', name: 'Heat pump' }, { stat_consumption: 'sensor.tv_energy' },
-] }), [{ entity: 'sensor.hp_power', type: 'other', name: 'Heat pump' }], 'only devices with a power sensor');
-checkConfig({ devices: [{ entity: 'sensor.hp_power', type: 'heat_pump', name: 'Warmtepomp' }] });
-assert.throws(() => checkConfig({ devices: [{ entity: 'sensor.x', type: 'rocket' }] }), /not one of/);
-assert.throws(() => checkConfig({ devices: [{ type: 'ac' }] }), /entity/);
+checkConfig({ devices: [{ entity: 'sensor.hp_power' }] }); // old configs with devices still load
 
 // Today's totals: kWh meters per kind, then the share covered without the grid
 const stats = energyStatsFromPrefs({ energy_sources: [

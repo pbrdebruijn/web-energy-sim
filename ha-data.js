@@ -3,7 +3,6 @@
 import { N, DT } from './sim.js';
 
 export const POWER_KEYS = ['solar', 'grid', 'battery', 'ev', 'home'];
-export const DEVICE_TYPES = ['heat_pump', 'ac', 'boiler', 'washing_machine', 'other'];
 export const ENTITY_KEYS = [...POWER_KEYS, 'battery_soc', 'ev_soc', 'ev_plugged', 'price', 'weather'];
 const SLOT_MS = DT * 3600e3;
 
@@ -19,14 +18,6 @@ export function checkConfig(config) {
     if (!POWER_KEYS.includes(k)) throw new Error(`invert can list ${POWER_KEYS.join(', ')}, not "${k}".`);
   }
   if (config.ev_name !== undefined && typeof config.ev_name !== 'string') throw new Error('ev_name must be text.');
-  if (config.devices !== undefined) {
-    if (!Array.isArray(config.devices) || config.devices.length > 4) throw new Error('devices must be a list of at most 4 devices.');
-    for (const d of config.devices) {
-      if (typeof d?.entity !== 'string' || !/^[a-z_]+\.[a-z0-9_]+$/.test(d.entity)) throw new Error('Each device needs "entity:" with a power sensor, like sensor.heat_pump_power.');
-      if (d.type !== undefined && !DEVICE_TYPES.includes(d.type)) throw new Error(`Device type "${d.type}" is not one of ${DEVICE_TYPES.join(', ')}.`);
-      if (d.name !== undefined && typeof d.name !== 'string') throw new Error('A device name must be text.');
-    }
-  }
   if (config.cheapest_hours !== undefined && !(Number.isInteger(config.cheapest_hours) && config.cheapest_hours >= 0 && config.cheapest_hours <= 24)) {
     throw new Error('cheapest_hours must be a whole number from 0 to 24.');
   }
@@ -184,11 +175,6 @@ export function entitiesFromEnergyPrefs(prefs) {
   return out;
 }
 
-// Individual devices with a power sensor in the Energy dashboard, at most 4 (the spots in the scene)
-export const devicesFromEnergyPrefs = (prefs) => (prefs?.device_consumption ?? [])
-  .filter((d) => typeof d.stat_rate === 'string' && /^[a-z_]+\.[a-z0-9_]+$/.test(d.stat_rate))
-  .slice(0, 4).map((d) => ({ entity: d.stat_rate, type: 'other', ...(d.name ? { name: d.name } : {}) }));
-
 // kWh meters and cost statistics from the Energy dashboard, as lists of statistic ids per kind (a home can have several)
 export function energyStatsFromPrefs(prefs) {
   const out = { grid_in: [], grid_out: [], solar: [], batt_out: [], batt_in: [], cost: [], compensation: [] };
@@ -252,7 +238,7 @@ export function sunHours(st) {
   return rise != null && set != null && set > rise ? { rise, set } : null;
 }
 
-// The Home Assistant action for a tap or hold on a label (solar, home, grid, battery, ev) or a device:
+// The Home Assistant action for a tap or hold on a label (solar, home, grid, battery, ev):
 // per-label config first, then the card-wide one. null means the card's default (tap opens details).
 export const ACTION_KEYS = ['solar', 'home', 'grid', 'battery', 'ev'];
 export const actionFor = (config, key, kind) => config.actions?.[key]?.[`${kind}_action`] ?? config[`${kind}_action`] ?? null;
