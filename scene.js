@@ -50,7 +50,14 @@ export function createScene(container, { maxPixelRatio = 2 } = {}) {
     parent.add(m);
     return m;
   };
-  const box = (w, h, d, material, x, y, z, parent) => add(new THREE.BoxGeometry(w, h, d), material, x, y, z, parent);
+  // Boxes of the same size share one geometry
+  const boxGeos = new Map();
+  const box = (w, h, d, material, x, y, z, parent) => {
+    const key = [w, h, d].join();
+    if (!boxGeos.has(key)) boxGeos.set(key, new THREE.BoxGeometry(w, h, d));
+    return add(boxGeos.get(key), material, x, y, z, parent);
+  };
+  const dummy = new THREE.Object3D(); // scratch transform for instanced meshes
 
   // Lot, street, driveway
   const grassMat = mat('#7cc66a');
@@ -59,8 +66,9 @@ export function createScene(container, { maxPixelRatio = 2 } = {}) {
   const cast = (m) => ((m.castShadow = true), m);
   receive(box(26, 0.5, 22, grassMat, 0, -0.25, 0));
   receive(box(26, 0.06, 3, mat('#555b66'), 0, 0.03, 9.5));
-  receive(box(2.8, 0.06, 10.4, mat('#c9c4b8'), 6.3, 0.03, 3));
-  receive(box(1.4, 0.06, 6, mat('#c9c4b8'), -2, 0.03, 5));
+  const concrete = mat('#c9c4b8');
+  receive(box(2.8, 0.06, 10.4, concrete, 6.3, 0.03, 3));
+  receive(box(1.4, 0.06, 6, concrete, -2, 0.03, 5));
 
   // House: x -6..2, z -4..2, front faces +z
   cast(receive(box(8, 3.2, 6, mat('#f2e6d0'), -2, 1.6, -1)));
@@ -81,37 +89,47 @@ export function createScene(container, { maxPixelRatio = 2 } = {}) {
   panelGroup.rotation.x = -(Math.PI / 2 - slope);
   scene.add(panelGroup);
   const panelMat = mat('#1d3461', { emissive: '#4f8fff', emissiveIntensity: 0, roughness: 0.25, metalness: 0.4 });
-  const panels = [];
-  for (let row = 0; row < 3; row++)
-    for (let col = 0; col < 9; col++)
-      panels.push(box(0.88, 1.12, 0.06, panelMat, (col - 4) * 0.95, 0.85 + row * 1.2, 0.06, panelGroup));
+  const panelCount = 27;
+  const panels = new THREE.InstancedMesh(new THREE.BoxGeometry(0.88, 1.12, 0.06), panelMat, panelCount);
+  for (let i = 0; i < panelCount; i++) {
+    const row = Math.floor(i / 9), col = i % 9;
+    dummy.position.set((col - 4) * 0.95, 0.85 + row * 1.2, 0.06);
+    dummy.updateMatrix();
+    panels.setMatrixAt(i, dummy.matrix);
+  }
+  Object.assign(panels, { frustumCulled: false }); // bounds would be cached at count 0
+  panelGroup.add(panels);
 
   // Home battery with five charge LEDs
-  cast(box(0.5, 1.6, 1.1, mat('#e9edf2'), 2.3, 0.8, -2.6));
+  const white = mat('#e9edf2');
+  cast(box(0.5, 1.6, 1.1, white, 2.3, 0.8, -2.6));
   const leds = [0, 1, 2, 3, 4].map((i) =>
     box(0.04, 0.18, 0.7, new THREE.MeshBasicMaterial({ color: '#333' }), 2.57, 0.35 + i * 0.26, -2.6));
 
   // Charger post and car
-  box(0.25, 1.2, 0.25, mat('#e9edf2'), 4.6, 0.6, 1);
+  box(0.25, 1.2, 0.25, white, 4.6, 0.6, 1);
   const chargerLed = box(0.27, 0.08, 0.27, new THREE.MeshBasicMaterial({ color: '#444' }), 4.6, 1.1, 1);
   const car = new THREE.Group();
   scene.add(car);
   cast(box(1.9, 0.65, 4.4, mat('#f4f5f7', { roughness: 0.3, metalness: 0.3 }), 0, 0.7, 0, car));
   cast(box(1.7, 0.6, 2.5, mat('#1b2330', { roughness: 0.15 }), 0, 1.3, -0.3, car));
   const wheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.25, 16).rotateZ(Math.PI / 2);
-  for (const [x, z] of [[-0.9, 1.4], [0.9, 1.4], [-0.9, -1.4], [0.9, -1.4]]) add(wheelGeo, mat('#16181c'), x, 0.36, z, car);
+  const tyre = mat('#16181c');
+  for (const [x, z] of [[-0.9, 1.4], [0.9, 1.4], [-0.9, -1.4], [0.9, -1.4]]) add(wheelGeo, tyre, x, 0.36, z, car);
   const tailMat = new THREE.MeshBasicMaterial({ color: '#b3261e' });
   for (const x of [-0.7, 0.7]) box(0.35, 0.12, 0.05, tailMat, x, 0.85, -2.2, car);
 
   // Grid pole
-  cast(box(0.3, 6, 0.3, mat('#6b5846'), -9, 3, 7.2));
-  cast(box(2.4, 0.2, 0.2, mat('#6b5846'), -9, 5.4, 7.2));
+  const wood = mat('#6b5846');
+  cast(box(0.3, 6, 0.3, wood, -9, 3, 7.2));
+  cast(box(2.4, 0.2, 0.2, wood, -9, 5.4, 7.2));
   box(0.9, 1, 0.7, mat('#8b9199'), -9, 0.5, 6.5);
 
   // Trees
   const coneMat = mat('#3f8f4f');
+  const bark = mat('#6b4a2f');
   for (const [x, z, s] of [[-10, -6, 1.2], [-8.5, -1, 0.9], [9.5, -7, 1.3], [10.5, 4, 1]]) {
-    cast(add(new THREE.CylinderGeometry(0.2 * s, 0.26 * s, 1.4 * s, 8), mat('#6b4a2f'), x, 0.7 * s, z));
+    cast(add(new THREE.CylinderGeometry(0.2 * s, 0.26 * s, 1.4 * s, 8), bark, x, 0.7 * s, z));
     cast(add(new THREE.ConeGeometry(1.3 * s, 2.8 * s, 8), coneMat, x, 2.6 * s, z));
   }
 
@@ -120,12 +138,13 @@ export function createScene(container, { maxPixelRatio = 2 } = {}) {
   const moon = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), new THREE.MeshBasicMaterial({ color: '#dfe6f5' }));
   scene.add(sun, moon);
   const cloudMat = new THREE.MeshStandardMaterial({ color: '#ffffff', transparent: true, opacity: 0.9 });
+  const puffGeo = new THREE.SphereGeometry(1, 12, 8); // unit sphere, sized by scale
   const clouds = [[-9, 13, -8], [3, 15, -11], [11, 12, -5], [-3, 14, 3], [8, 16, 6], [-12, 15, 5]].map(([x, y, z]) => {
     const g = new THREE.Group();
     for (const [dx, s] of [[-1.3, 1], [0, 1.4], [1.4, 1.1]]) {
-      const puff = new THREE.Mesh(new THREE.SphereGeometry(s, 12, 8), cloudMat);
+      const puff = new THREE.Mesh(puffGeo, cloudMat);
       puff.position.set(dx, 0, 0);
-      puff.scale.y = 0.6;
+      puff.scale.set(s, 0.6 * s, s);
       g.add(puff);
     }
     g.position.set(x, y, z);
@@ -135,25 +154,25 @@ export function createScene(container, { maxPixelRatio = 2 } = {}) {
 
   // Cables with moving particles
   const flows = {};
-  const tube = (curve, color) => add(new THREE.TubeGeometry(curve, 48, 0.045, 6), mat(color), 0, 0, 0);
+  const cable = mat('#2a2d33');
+  const tube = (curve) => add(new THREE.TubeGeometry(curve, 48, 0.045, 6), cable, 0, 0, 0);
   const polyline = (pts) => {
     const path = new THREE.CurvePath();
     for (let i = 1; i < pts.length; i++) path.add(new THREE.LineCurve3(V(...pts[i - 1]), V(...pts[i])));
     return path;
   };
+  const dotGeo = new THREE.SphereGeometry(0.13, 10, 8);
   let evCable;
   for (const [key, pts] of Object.entries(PATHS)) {
     const curve = polyline(pts);
     if (key === 'ev') {
-      tube(polyline(pts.slice(0, 3)), '#2a2d33');
-      evCable = tube(polyline(pts.slice(2)), '#2a2d33');
-    } else tube(curve, '#2a2d33');
-    const pm = new THREE.MeshBasicMaterial({ color: COLORS[key] });
-    const dots = Array.from({ length: PARTICLES }, () => {
-      const d = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), pm);
-      scene.add(d);
-      return d;
-    });
+      tube(polyline(pts.slice(0, 3)));
+      evCable = tube(polyline(pts.slice(2)));
+    } else tube(curve);
+    // One instanced mesh per flow; update() sets how many of its dots are shown
+    const dots = new THREE.InstancedMesh(dotGeo, new THREE.MeshBasicMaterial({ color: COLORS[key] }), PARTICLES);
+    dots.frustumCulled = false; // bounds would be cached while the dots move
+    scene.add(dots);
     flows[key] = { curve, dots, phase: 0, len: curve.getLength() };
   }
 
@@ -207,7 +226,7 @@ export function createScene(container, { maxPixelRatio = 2 } = {}) {
     });
     windowMat.emissiveIntensity = (1 - day) * (0.35 + Math.min(1.2, s.home));
     panelMat.emissiveIntensity = s.kWp ? 0.5 * (s.solar / s.kWp) : 0;
-    panels.forEach((p, i) => (p.visible = i < Math.round(s.kWp / 0.45)));
+    panels.count = THREE.MathUtils.clamp(Math.round(s.kWp / 0.45), 0, panelCount);
     leds.forEach((l, i) => l.material.color.set(!s.battOn ? '#333' : s.battSoc > i / 5 + 0.02 ? COLORS.batt : '#333'));
 
     const ease = s.evAway * s.evAway * (3 - 2 * s.evAway);
@@ -220,10 +239,13 @@ export function createScene(container, { maxPixelRatio = 2 } = {}) {
       const p = s[key], mag = Math.abs(p);
       const n = mag < 0.03 ? 0 : Math.min(PARTICLES, 3 + Math.ceil(mag * 2));
       f.phase = (f.phase + (Math.sign(p) * (1.5 + 0.5 * Math.min(mag, 11)) * dt) / f.len + 1) % 1;
-      f.dots.forEach((d, i) => {
-        d.visible = i < n;
-        if (d.visible) d.position.copy(f.curve.getPointAt((i / n + f.phase) % 1));
-      });
+      for (let i = 0; i < n; i++) {
+        dummy.position.copy(f.curve.getPointAt((i / n + f.phase) % 1));
+        dummy.updateMatrix();
+        f.dots.setMatrixAt(i, dummy.matrix);
+      }
+      f.dots.count = n;
+      f.dots.instanceMatrix.needsUpdate = true;
     }
 
     seasons(s.month, day, dt, clock);

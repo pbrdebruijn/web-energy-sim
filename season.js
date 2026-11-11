@@ -14,8 +14,8 @@ const rand = (a, b) => a + Math.random() * (b - a);
 
 export function createSeasons({ scene, add, box, mat, grassMat, coneMat }) {
   // Two leafy trees whose crowns change most with the seasons
+  const bark = mat('#6b4a2f');
   const crowns = [[-11.3, 3.4, 1], [10.8, -1.8, 1.15]].map(([x, z, s]) => {
-    const bark = mat('#6b4a2f');
     add(new THREE.CylinderGeometry(0.18 * s, 0.24 * s, 2 * s, 8), bark, x, s, z).castShadow = true;
     for (const [ry, rz] of [[0, 0.7], [2.1, 0.6], [4.2, 0.8], [1, -0.1]]) { // bare branches, hidden by the crown when in leaf
       const b = add(new THREE.CylinderGeometry(0.04 * s, 0.08 * s, 1.5 * s, 6).translate(0, 0.75 * s, 0), bark, x, 1.8 * s, z);
