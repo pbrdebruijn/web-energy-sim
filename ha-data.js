@@ -209,3 +209,11 @@ export function cheapestHours(prices, from, n) {
   for (let h = Math.max(0, Math.floor(from)); h < 24; h++) if (prices[h * 4] != null) hours.push([prices[h * 4], h]);
   return new Set(hours.sort((a, b) => a[0] - b[0]).slice(0, n).map(([, h]) => h));
 }
+
+// Today's sunrise and sunset as hours, from sun.sun. Its next_rising and next_setting may already be tomorrow's,
+// which is a few minutes off at most. null without sun.sun, or in polar day or night.
+export function sunHours(st) {
+  const hour = (iso) => { const d = new Date(iso); return Number.isNaN(+d) ? null : d.getHours() + d.getMinutes() / 60; };
+  const rise = hour(st?.attributes?.next_rising), set = hour(st?.attributes?.next_setting);
+  return rise != null && set != null && set > rise ? { rise, set } : null;
+}

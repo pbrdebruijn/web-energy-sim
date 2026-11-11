@@ -14,7 +14,7 @@
 </head>
 <body>
 <main>
-  <p>Fake Home Assistant fed by the simulator. Add <code>?light</code> for a light theme. Clicked label: <span id="clicked">none</span></p>
+  <p>Fake Home Assistant fed by the simulator. Add <code>?light</code> for a light theme, <code>?lang=nl</code> or <code>de</code> for a language and <code>?currency=USD</code> for another currency. Clicked label: <span id="clicked">none</span></p>
   <energy-scene-card></energy-scene-card>
 </main>
 <script type="module">
@@ -67,12 +67,14 @@ const start = new Date(); start.setHours(0, 0, 0, 0);
 const slotNow = () => Math.min(N - 1, Math.floor((Date.now() - start) / (DT * 3600e3)));
 
 const hass = () => {
-  const i = slotNow(), states = { 'weather.home': { state: 'sunny', attributes: {} } };
+  const i = slotNow(), states = { 'weather.home': { state: 'sunny', attributes: {} },
+    'sun.sun': { state: 'above_horizon', attributes: { next_rising: new Date(+start + 8.5 * 3600e3).toISOString(), next_setting: new Date(+start + 17 * 3600e3).toISOString() } } };
   for (const [id, [f, unit]] of Object.entries(SENSORS)) {
     states[id] = { state: String(f(i)), attributes: { unit_of_measurement: unit, ...(id.includes('price') ? { today: r.buy.filter((_, k) => k % 4 === 0) } : {}) } };
   }
+  const q = new URLSearchParams(location.search); // ?lang=nl&currency=USD to try other languages and currencies
   return {
-    states,
+    states, locale: { language: q.get('lang') ?? 'en' }, config: { currency: q.get('currency') ?? 'EUR' },
     async callWS(msg) {
       if (msg.type === 'energy/get_prefs') return ENERGY_PREFS;
       if (msg.type === 'energy/solar_forecast') { // hourly Wh, a bit above the simulated solar

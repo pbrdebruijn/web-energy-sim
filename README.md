@@ -8,7 +8,8 @@ What the card does:
 
 - Each dot takes the colour of where its power comes from: yellow for solar, purple for the home battery, orange for the grid. A car charging on solar gets yellow dots, and the car and house labels say it in numbers, like "70% solar, 30% grid".
 - Labels follow each device and show its power right now. Click a label to open that entity's details and history in Home Assistant.
-- The sun moves with the real time and month, the windows light up at night, and the panels glow with the solar output.
+- The sun rises and sets at your home's real times, from Home Assistant's `sun.sun`. The windows light up at night, and the panels glow with the solar output.
+- The card follows your Home Assistant language (English, Dutch and German for now) and currency, including decimal commas where your language uses them. The editor itself is in English.
 - The scenery follows the season. Snow and a snowman in winter, blossom in spring, birds in summer, falling leaves in autumn and a pumpkin in October. A jogger and a dog run past by day.
 - The car drives off when it is unplugged and parks again when it comes back, if you add a plugged-in sensor.
 - A row of tiles shows today's totals from the Energy dashboard: imported, exported, solar, the share of your use covered without the grid, and today's energy cost when the Energy dashboard tracks it. They are the same meter readings the Energy dashboard uses, refreshed every 5 minutes.

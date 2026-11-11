@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { simulate, buyPrice, SAMPLE, N, sources } from './sim.js';
-import { bucket, toValue, checkConfig, buildDay, pricesFromAttribute, guessEntities, toFormData, fromFormData, entitiesFromEnergyPrefs, devicesFromEnergyPrefs, energyStatsFromPrefs, dayTotals, forecastSlots, cheapestHours } from './ha-data.js';
+import { bucket, toValue, checkConfig, buildDay, pricesFromAttribute, guessEntities, toFormData, fromFormData, entitiesFromEnergyPrefs, devicesFromEnergyPrefs, energyStatsFromPrefs, dayTotals, forecastSlots, cheapestHours, sunHours } from './ha-data.js';
 
 const base = {
   yearlyKwh: 3500, month: 5, kWp: 6, weather: 1, saldering: true,
@@ -142,6 +142,11 @@ assert.equal(forecastSlots({}, day0), null, 'no forecast');
 const prices = Array.from({ length: N }, (_, i) => [5, 1, 3, 2][Math.floor(i / 4) % 4]);
 assert.deepEqual([...cheapestHours(prices, 2.5, 3)].sort((a, b) => a - b), [5, 9, 13], 'cheapest hours still to come, earliest first on ties');
 assert.ok(!cheapestHours(prices, 2.5, 24).has(1), 'past hours are not offered');
+
+// Sunrise and sunset come from sun.sun in local time
+const at = (h, m) => new Date(2026, 5, 2, h, m).toISOString();
+assert.deepEqual(sunHours({ attributes: { next_rising: at(5, 15), next_setting: at(22, 0) } }), { rise: 5.25, set: 22 }, 'sun hours');
+assert.equal(sunHours(undefined), null, 'no sun.sun');
 
 // The car name from the config is text, never markup
 const { renderLabels } = await import('./ui.js');

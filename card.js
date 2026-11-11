@@ -2,8 +2,8 @@
 // and the chart below shows today so far. Built into dist/energy-scene-card.js by `npm run build`.
 import { createScene } from './scene.js';
 import { daylight, N, DT } from './sim.js';
-import { createChart, renderLabels, UI_CSS, hhmm, eur, esc, kwh, pct } from './ui.js';
-import { checkConfig, toValue, weatherFactor, historyPoints, bucket, pricesFromAttribute, buildDay, guessEntities, toFormData, fromFormData, POWER_KEYS, entitiesFromEnergyPrefs, devicesFromEnergyPrefs, energyStatsFromPrefs, dayTotals, forecastSlots, cheapestHours } from './ha-data.js';
+import { createChart, renderLabels, UI_CSS, hhmm, esc, kwh, pct, fmt, tr, setLocale } from './ui.js';
+import { checkConfig, toValue, weatherFactor, historyPoints, bucket, pricesFromAttribute, buildDay, guessEntities, toFormData, fromFormData, POWER_KEYS, entitiesFromEnergyPrefs, devicesFromEnergyPrefs, energyStatsFromPrefs, dayTotals, forecastSlots, cheapestHours, sunHours } from './ha-data.js';
 
 const LABEL_ENTITY = { solar: 'solar', home: 'home', grid: 'grid', batt: 'battery', ev: 'ev' };
 const HISTORY_EVERY = 5 * 60e3, CHART_EVERY = 5e3, SCRUB_HOLD = 15e3;
@@ -54,6 +54,8 @@ class EnergySceneCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    const locale = `${hass.locale?.language ?? hass.language}/${hass.config?.currency}`;
+    if (locale !== this.locale) { this.locale = locale; setLocale(hass.locale?.language ?? hass.language, hass.config?.currency); this.labelKey = ''; this.chart?.draw(); }
     if (!this.prefsAsked) this.loadEnergyPrefs();
     if (!this.scene) return;
     if (!this.hist) this.loadHistory();
@@ -105,13 +107,13 @@ class EnergySceneCard extends HTMLElement {
       if (!entityId) continue;
       el.tabIndex = 0;
       el.setAttribute('role', 'button');
-      el.title = 'Show details and history';
+      el.title = tr('Show details and history');
       const open = () => this.moreInfo(entityId);
       el.onclick = open;
       el.onkeydown = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } };
     }
     // Device chips: one button each, filled in by frame()
-    q('.devices').innerHTML = this.devices.map((d, k) => `<button data-k="${k}" title="Show details and history"></button>`).join('');
+    q('.devices').innerHTML = this.devices.map((d, k) => `<button data-k="${k}" title="${tr('Show details and history')}"></button>`).join('');
     q('.devices').onclick = (ev) => { const b = ev.target.closest('button'); if (b) this.moreInfo(this.devices[b.dataset.k].entity); };
     this.show = { batt: !!(e.battery || e.battery_soc), ev: !!(e.ev || e.ev_soc), price: !!e.price };
     this.chart = withChart && createChart({ svg: q('.chart'), tip: q('.tip'), legend: q('.legend'), box: q('.charts') }, (h) => {
@@ -175,7 +177,7 @@ class EnergySceneCard extends HTMLElement {
       this.histDay = +start;
     } catch (err) {
       console.warn('energy-scene-card: history did not load', err);
-      this.histError = `History did not load: ${err.message ?? err}`;
+      this.histError = `${tr('History did not load')}: ${err.message ?? err}`;
     }
     this.applyLive(true);
   }
@@ -210,8 +212,8 @@ class EnergySceneCard extends HTMLElement {
     el.innerHTML = [
       [kwh(T.imported), 'Imported today'], [kwh(T.exported), 'Exported today'], [kwh(T.solar), 'Solar today'],
       T.selfSufficient != null && [pct(T.selfSufficient), 'Covered without the grid'],
-      T.cost != null && [eur(T.cost), 'Energy cost today'],
-    ].filter(Boolean).map(([v, label]) => `<div><b>${v}</b>${label}</div>`).join('');
+      T.cost != null && [fmt.money(T.cost), 'Energy cost today'],
+    ].filter(Boolean).map(([v, label]) => `<div><b>${v}</b>${tr(label)}</div>`).join('');
   }
 
   // Merge the current states into today's history; the slot for "now" shows the live values.
@@ -237,9 +239,9 @@ class EnergySceneCard extends HTMLElement {
       this.live[k] = toValue(k, st.state, st.attributes.unit_of_measurement, invert.includes(k));
       if (k === 'price') prices = pricesFromAttribute(st.attributes.today);
     }
-    if (!e.grid && this.prefsAsked) missing.push('no grid power sensor. Pick one in the card editor, or add one to the Energy dashboard');
+    if (!e.grid && this.prefsAsked) missing.push(tr('no grid power sensor. Pick one in the card editor, or add one to the Energy dashboard'));
     missing.push(...this.devices.filter((d) => !hass.states[d.entity]).map((d) => d.entity));
-    this.warn(missing.length ? `Entity not found: ${missing.join(', ')}` : this.histError ?? '');
+    this.warn(missing.length ? `${tr('Entity not found')}: ${missing.join(', ')}` : this.histError ?? '');
 
     const i = Math.min(N - 1, Math.floor(hourOf(new Date()) / DT));
     const slots = {};
@@ -285,14 +287,15 @@ class EnergySceneCard extends HTMLElement {
       renderLabels(this.scene.labels, r, i, { batt: this.show.batt, ev: this.show.ev, evName: this.config.ev_name ?? 'EV', away });
       this.q('.devices').querySelectorAll('button').forEach((b, k) => { // devices show their live power, also while replaying earlier today
         const d = this.devices[k];
-        b.innerHTML = `<span>${esc(this.devNames[d.entity] ?? d.entity)}</span><b>${Math.abs(this.devValues[k] ?? 0).toFixed(1)} kW</b>`;
+        b.innerHTML = `<span>${esc(this.devNames[d.entity] ?? d.entity)}</span><b>${fmt.num(Math.abs(this.devValues[k] ?? 0), 1)} kW</b>`;
       });
-      this.q('.clock small').innerHTML = `${live ? 'Now' : 'Earlier today'}${r.buy[i] == null ? '' : `<br>${eur(r.buy[i], 3)} per kWh`}`;
+      this.q('.clock small').innerHTML = `${tr(live ? 'Now' : 'Earlier today')}${r.buy[i] == null ? '' : `<br>${fmt.money(r.buy[i], 3)} ${tr('per kWh')}`}`;
+      this.renderTotals(); // follows a language change
     }
     const clock = hhmm(Math.floor(t * 12) / 12), timeEl = this.q('.clock time');
     if (timeEl.textContent !== clock) timeEl.textContent = clock;
     this.chart && this.chart.playhead(t);
-    const month = now.getMonth(), { rise, set } = daylight(month);
+    const month = now.getMonth(), { rise, set } = sunHours(this._hass?.states['sun.sun']) ?? daylight(month); // sun.sun knows the home's location
     this.scene.update({
       t, month, rise, set, weather: this.weather, kWp: Number(this.config.solar_kwp ?? 5.5),
       solar: r.solar[i] ?? 0, home: r.home[i] ?? 0, ev: r.ev[i] ?? 0, batt: r.batt[i] ?? 0, grid: r.grid[i] ?? 0,
