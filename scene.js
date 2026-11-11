@@ -39,15 +39,14 @@ export function createScene(container, { maxPixelRatio = 2 } = {}) {
   const hemi = new THREE.HemisphereLight('#ffffff', '#5a7a4a', 1);
   const sunLight = new THREE.DirectionalLight('#fff4dd', 2);
   sunLight.castShadow = true;
-  sunLight.shadow.mapSize.set(2048, 2048);
-  Object.assign(sunLight.shadow.camera, { left: -18, right: 18, top: 18, bottom: -18, far: 90 });
+  sunLight.shadow.mapSize.set(1024, 1024);
+  Object.assign(sunLight.shadow.camera, { left: -14, right: 14, top: 14, bottom: -14, far: 90 });
   scene.add(hemi, sunLight);
 
   const mat = (color, extra) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, ...extra });
   const add = (geo, material, x, y, z, parent = scene) => {
     const m = new THREE.Mesh(geo, material);
     m.position.set(x, y, z);
-    m.castShadow = m.receiveShadow = true;
     parent.add(m);
     return m;
   };
@@ -55,15 +54,18 @@ export function createScene(container, { maxPixelRatio = 2 } = {}) {
 
   // Lot, street, driveway
   const grassMat = mat('#7cc66a');
-  box(26, 0.5, 22, grassMat, 0, -0.25, 0);
-  box(26, 0.06, 3, mat('#555b66'), 0, 0.03, 9.5);
-  box(2.8, 0.06, 10.4, mat('#c9c4b8'), 6.3, 0.03, 3);
-  box(1.4, 0.06, 6, mat('#c9c4b8'), -2, 0.03, 5);
+  // Small parts skip shadows: each caster adds a draw to the shadow pass, and they barely show up in it
+  const receive = (m) => ((m.receiveShadow = true), m);
+  const cast = (m) => ((m.castShadow = true), m);
+  receive(box(26, 0.5, 22, grassMat, 0, -0.25, 0));
+  receive(box(26, 0.06, 3, mat('#555b66'), 0, 0.03, 9.5));
+  receive(box(2.8, 0.06, 10.4, mat('#c9c4b8'), 6.3, 0.03, 3));
+  receive(box(1.4, 0.06, 6, mat('#c9c4b8'), -2, 0.03, 5));
 
   // House: x -6..2, z -4..2, front faces +z
-  box(8, 3.2, 6, mat('#f2e6d0'), -2, 1.6, -1);
+  cast(receive(box(8, 3.2, 6, mat('#f2e6d0'), -2, 1.6, -1)));
   const tri = new THREE.Shape([new THREE.Vector2(-3.4, 0), new THREE.Vector2(3.4, 0), new THREE.Vector2(0, 2.2)]);
-  const roof = add(new THREE.ExtrudeGeometry(tri, { depth: 8.8, bevelEnabled: false }), mat('#b5533c'), -6.4, 3.2, -1);
+  const roof = cast(receive(add(new THREE.ExtrudeGeometry(tri, { depth: 8.8, bevelEnabled: false }), mat('#b5533c'), -6.4, 3.2, -1)));
   roof.rotation.y = Math.PI / 2;
   box(1.1, 2.1, 0.1, mat('#7a4b2a'), -2, 1.05, 2.02);
   const windowMat = mat('#9cc7e8', { emissive: '#ffd27a', emissiveIntensity: 0, roughness: 0.3 });
@@ -85,7 +87,7 @@ export function createScene(container, { maxPixelRatio = 2 } = {}) {
       panels.push(box(0.88, 1.12, 0.06, panelMat, (col - 4) * 0.95, 0.85 + row * 1.2, 0.06, panelGroup));
 
   // Home battery with five charge LEDs
-  box(0.5, 1.6, 1.1, mat('#e9edf2'), 2.3, 0.8, -2.6);
+  cast(box(0.5, 1.6, 1.1, mat('#e9edf2'), 2.3, 0.8, -2.6));
   const leds = [0, 1, 2, 3, 4].map((i) =>
     box(0.04, 0.18, 0.7, new THREE.MeshBasicMaterial({ color: '#333' }), 2.57, 0.35 + i * 0.26, -2.6));
 
@@ -94,23 +96,23 @@ export function createScene(container, { maxPixelRatio = 2 } = {}) {
   const chargerLed = box(0.27, 0.08, 0.27, new THREE.MeshBasicMaterial({ color: '#444' }), 4.6, 1.1, 1);
   const car = new THREE.Group();
   scene.add(car);
-  box(1.9, 0.65, 4.4, mat('#f4f5f7', { roughness: 0.3, metalness: 0.3 }), 0, 0.7, 0, car);
-  box(1.7, 0.6, 2.5, mat('#1b2330', { roughness: 0.15 }), 0, 1.3, -0.3, car);
+  cast(box(1.9, 0.65, 4.4, mat('#f4f5f7', { roughness: 0.3, metalness: 0.3 }), 0, 0.7, 0, car));
+  cast(box(1.7, 0.6, 2.5, mat('#1b2330', { roughness: 0.15 }), 0, 1.3, -0.3, car));
   const wheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.25, 16).rotateZ(Math.PI / 2);
   for (const [x, z] of [[-0.9, 1.4], [0.9, 1.4], [-0.9, -1.4], [0.9, -1.4]]) add(wheelGeo, mat('#16181c'), x, 0.36, z, car);
   const tailMat = new THREE.MeshBasicMaterial({ color: '#b3261e' });
   for (const x of [-0.7, 0.7]) box(0.35, 0.12, 0.05, tailMat, x, 0.85, -2.2, car);
 
   // Grid pole
-  box(0.3, 6, 0.3, mat('#6b5846'), -9, 3, 7.2);
-  box(2.4, 0.2, 0.2, mat('#6b5846'), -9, 5.4, 7.2);
+  cast(box(0.3, 6, 0.3, mat('#6b5846'), -9, 3, 7.2));
+  cast(box(2.4, 0.2, 0.2, mat('#6b5846'), -9, 5.4, 7.2));
   box(0.9, 1, 0.7, mat('#8b9199'), -9, 0.5, 6.5);
 
   // Trees
   const coneMat = mat('#3f8f4f');
   for (const [x, z, s] of [[-10, -6, 1.2], [-8.5, -1, 0.9], [9.5, -7, 1.3], [10.5, 4, 1]]) {
-    add(new THREE.CylinderGeometry(0.2 * s, 0.26 * s, 1.4 * s, 8), mat('#6b4a2f'), x, 0.7 * s, z);
-    add(new THREE.ConeGeometry(1.3 * s, 2.8 * s, 8), coneMat, x, 2.6 * s, z);
+    cast(add(new THREE.CylinderGeometry(0.2 * s, 0.26 * s, 1.4 * s, 8), mat('#6b4a2f'), x, 0.7 * s, z));
+    cast(add(new THREE.ConeGeometry(1.3 * s, 2.8 * s, 8), coneMat, x, 2.6 * s, z));
   }
 
   // Sun, moon, clouds

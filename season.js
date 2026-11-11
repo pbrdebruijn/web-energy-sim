@@ -16,12 +16,14 @@ export function createSeasons({ scene, add, box, mat, grassMat, coneMat }) {
   // Two leafy trees whose crowns change most with the seasons
   const crowns = [[-11.3, 3.4, 1], [10.8, -1.8, 1.15]].map(([x, z, s]) => {
     const bark = mat('#6b4a2f');
-    add(new THREE.CylinderGeometry(0.18 * s, 0.24 * s, 2 * s, 8), bark, x, s, z);
+    add(new THREE.CylinderGeometry(0.18 * s, 0.24 * s, 2 * s, 8), bark, x, s, z).castShadow = true;
     for (const [ry, rz] of [[0, 0.7], [2.1, 0.6], [4.2, 0.8], [1, -0.1]]) { // bare branches, hidden by the crown when in leaf
       const b = add(new THREE.CylinderGeometry(0.04 * s, 0.08 * s, 1.5 * s, 6).translate(0, 0.75 * s, 0), bark, x, 1.8 * s, z);
       b.rotation.set(0, ry, rz);
     }
-    return add(new THREE.IcosahedronGeometry(1.3 * s, 1), mat('#3f8f3a', { flatShading: true }), x, 2.6 * s, z);
+    const crown = add(new THREE.IcosahedronGeometry(1.3 * s, 1), mat('#3f8f3a', { flatShading: true }), x, 2.6 * s, z);
+    crown.castShadow = true;
+    return crown;
   });
 
   // Falling snow, leaves or petals: one instanced mesh, recycled from the top when a flake lands
@@ -81,6 +83,9 @@ export function createSeasons({ scene, add, box, mat, grassMat, coneMat }) {
     return p;
   });
   scene.add(runner, dog);
+  const casters = (g) => g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  casters(runner);
+  casters(dog);
 
   // Snowman in winter, pumpkin by the door in October
   const snowman = new THREE.Group();
@@ -91,6 +96,7 @@ export function createSeasons({ scene, add, box, mat, grassMat, coneMat }) {
   for (const x of [-0.1, 0.1]) box(0.05, 0.05, 0.02, dark, x, 1.88, 0.26, snowman);
   snowman.position.set(-4.6, 0, 5);
   scene.add(snowman);
+  casters(snowman);
   const pumpkin = add(new THREE.SphereGeometry(0.32, 14, 10).scale(1, 0.75, 1), mat('#e67e22', { emissive: '#ff8c00', emissiveIntensity: 0 }), -1.05, 0.24, 2.6);
   box(0.06, 0.14, 0.06, mat('#4e6b2f'), 0, 0.27, 0, pumpkin);
 
