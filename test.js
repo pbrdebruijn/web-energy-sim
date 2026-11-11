@@ -102,4 +102,11 @@ const guess2 = guessEntities(Object.fromEntries([
   st('sensor.hallway_motion_battery', 'battery', '%'), st('sensor.battery_power', 'power', 'kW'), st('sensor.battery_level', null, '%'),
 ].map((x) => [x.entity_id, x])));
 assert.equal(guess2.battery_soc, 'sensor.battery_level', 'battery level found by the power sensor name, not a motion sensor');
+// The car name from the config is text, never markup
+const { renderLabels } = await import('./ui.js');
+const tag = () => ({ innerHTML: '', classList: { toggle() {} } });
+const L = { solar: tag(), home: tag(), grid: tag(), batt: tag(), ev: tag() };
+renderLabels(L, buildDay({ grid: fill(1) }), 0, { batt: false, ev: true, evName: '<img src=x onerror=alert(1)>' });
+assert.ok(!L.ev.innerHTML.includes('<img') && L.ev.innerHTML.includes('&#60;img'), 'ev_name is escaped');
+assert.throws(() => checkConfig({ entities: { grid: 'sensor.a' }, ev_name: { x: 1 } }), /ev_name/);
 console.log('ok card data');

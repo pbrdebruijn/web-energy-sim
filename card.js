@@ -95,6 +95,7 @@ class EnergySceneCard extends HTMLElement {
     this.evAnim = 0;
     this.r = buildDay({});
     this.version = 0;
+    this.labelKey = ''; // new label elements after a config change must be filled again
     this.hist = null;
     // Only animate while the card is on screen; wall tablets keep dashboards open all day.
     this.io = new IntersectionObserver(([entry]) => { this.visible = entry.isIntersecting; if (this.visible) this.start(); });

@@ -18,6 +18,7 @@ export function checkConfig(config) {
   for (const k of config.invert ?? []) {
     if (!POWER_KEYS.includes(k)) throw new Error(`invert can list ${POWER_KEYS.join(', ')}, not "${k}".`);
   }
+  if (config.ev_name !== undefined && typeof config.ev_name !== 'string') throw new Error('ev_name must be text.');
   for (const k of ['height', 'solar_kwp']) {
     if (config[k] !== undefined && !(Number(config[k]) > 0)) throw new Error(`${k} must be a positive number.`);
   }

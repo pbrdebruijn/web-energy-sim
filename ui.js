@@ -7,6 +7,8 @@ export const eur = (v, d = 2) => `${v < 0 ? '-' : ''}€${Math.abs(v).toFixed(d)
 export const kwh = (v) => `${v.toFixed(1)} kWh`;
 export const pct = (v) => `${Math.round(v * 100)}%`;
 export const dot = (c) => `<i style="background:${c}"></i>`;
+// For text from users or config that goes into innerHTML
+export const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 // Labels and tooltip sit on the 3D scene, so they keep their own dark colours in light themes too.
 export const UI_CSS = `
@@ -36,7 +38,8 @@ export const UI_CSS = `
 `;
 
 // r: the day as 15-minute arrays (see sim.js). show: { batt, ev } say which devices exist. away: the car is out driving.
-export function renderLabels(L, r, i, { batt, ev, evName = 'EV', away = false }) {
+export function renderLabels(L, r, i, { batt, ev, evName: rawName = 'EV', away = false }) {
+  const evName = esc(rawName); // comes from the card config, which users copy from forums
   const bar = (v) => `<span class="soc"><i style="width:${v * 100}%"></i></span>`;
   const kw = (v) => `${Math.abs(v ?? 0).toFixed(1)} kW`;
   const price = (r.grid[i] < 0 ? r.sell[i] : null) ?? r.buy[i];
