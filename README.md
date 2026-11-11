@@ -139,7 +139,12 @@ Integrations disagree about signs. Many batteries report charging as positive. I
 
 ### Prices
 
-The chart shows the price per hour when your price sensor has a `today` attribute with 24 hourly or 96 quarter-hour prices, as Nord Pool sensors do. Other sensors still work. The card then shows the prices recorded so far today.
+The chart shows prices for the whole day, including the hours still to come, when your price sensor lists them in an attribute. These work:
+
+- **Zonneplan:** `sensor.zonneplan_current_electricity_tariff` or `sensor.zonneplan_current_quarter_hourly_electricity_tariff`, from their `forecast` attribute.
+- **Nord Pool:** the `today` or `raw_today` attribute.
+
+Other price sensors still work. The card then shows the prices recorded so far today.
 
 ## How it gets the data
 

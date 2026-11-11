@@ -79,9 +79,36 @@ export function bucket(points, start, end) {
 }
 
 // Hourly or quarter-hourly prices for today from a sensor attribute (Nord Pool style "today: [..]"), or null
-export function pricesFromAttribute(today) {
-  if (!Array.isArray(today) || ![24, 96].includes(today.length) || !today.every(Number.isFinite)) return null;
-  return Array.from({ length: N }, (_, i) => today[today.length === 24 ? Math.floor(i / 4) : i]);
+// Today's prices per 15-minute slot from the price sensor's attributes, in € per kWh, or null. Understands:
+// - today: [24 or 96 numbers] (Nord Pool), in the sensor's unit
+// - raw_today: [{ start, end, value }] (Nord Pool), in the sensor's unit
+// - forecast: [{ datetime, electricity_price }] or [{ start_date, end_date, price_tax_included: { amount } }] (Zonneplan),
+//   where Zonneplan gives prices in units of 1e-7 €
+export function pricesFromAttributes(attrs, unit, dayStart) {
+  const scale = (v) => toValue('price', String(v), unit);
+  const today = attrs?.today;
+  if (Array.isArray(today) && [24, 96].includes(today.length) && today.every(Number.isFinite)) {
+    return Array.from({ length: N }, (_, i) => scale(today[today.length === 24 ? Math.floor(i / 4) : i]));
+  }
+  const list = Array.isArray(attrs?.forecast) ? attrs.forecast : Array.isArray(attrs?.raw_today) ? attrs.raw_today : null;
+  if (!list) return null;
+  const items = list.map((it) => {
+    const zonneplan = it?.electricity_price !== undefined || it?.price_tax_included !== undefined;
+    const raw = it?.price_tax_included?.amount ?? it?.electricity_price ?? it?.value ?? it?.price;
+    return {
+      t: Date.parse(it?.start_date ?? it?.datetime ?? it?.start), end: Date.parse(it?.end_date ?? it?.end),
+      price: zonneplan ? Number(raw) * 1e-7 : scale(raw),
+    };
+  }).filter((x) => Number.isFinite(x.t) && Number.isFinite(x.price)).sort((a, b) => a.t - b.t);
+  const slotMs = DT * 3600e3, out = new Array(N).fill(null);
+  let any = false;
+  items.forEach((x, i) => {
+    const end = Number.isFinite(x.end) ? x.end : Math.min(items[i + 1]?.t ?? Infinity, x.t + 3600e3); // hourly at most, so gaps stay gaps
+    for (let k = Math.max(0, Math.floor((x.t - dayStart) / slotMs)); k < N && dayStart + k * slotMs < end; k++) {
+      if (dayStart + (k + 1) * slotMs > x.t) { out[k] = x.price; any = true; }
+    }
+  });
+  return any ? out : null;
 }
 
 // slots: { key: array of N values or nulls } for each configured entity. Missing home use follows from the balance

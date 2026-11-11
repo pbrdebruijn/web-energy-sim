@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { simulate, buyPrice, SAMPLE, N, sources } from './sim.js';
-import { bucket, toValue, checkConfig, buildDay, pricesFromAttribute, guessEntities, toFormData, fromFormData, entitiesFromEnergyPrefs, devicesFromEnergyPrefs, energyStatsFromPrefs, dayTotals, forecastSlots, cheapestHours, sunHours, actionFor } from './ha-data.js';
+import { bucket, toValue, checkConfig, buildDay, pricesFromAttributes, guessEntities, toFormData, fromFormData, entitiesFromEnergyPrefs, devicesFromEnergyPrefs, energyStatsFromPrefs, dayTotals, forecastSlots, cheapestHours, sunHours, actionFor } from './ha-data.js';
 
 const base = {
   yearlyKwh: 3500, month: 5, kWp: 6, weather: 1, saldering: true,
@@ -70,8 +70,18 @@ const fill = (v) => new Array(N).fill(v);
 const day = buildDay({ solar: fill(3), grid: fill(-1), battery: fill(-0.5), ev: fill(1) });
 close(day.home[0], 0.5, 'home use follows from the balance: 3 - 1 - 0.5 - 1');
 assert.equal(day.evAway[0], false, 'without a plugged-in sensor the car stays home');
-assert.equal(pricesFromAttribute([1, 2]), null, 'odd price lists are ignored');
-assert.equal(pricesFromAttribute([...Array(24).keys()])[5], 1, 'hourly prices fill four quarters each');
+const D0 = Date.UTC(2026, 0, 1), iso = (h) => new Date(D0 + h * 3600e3).toISOString();
+assert.equal(pricesFromAttributes({ today: [1, 2] }, '€/kWh', D0), null, 'odd price lists are ignored');
+assert.equal(pricesFromAttributes({ today: [...Array(24).keys()] }, '€/kWh', D0)[5], 1, 'hourly prices fill four quarters each');
+close(pricesFromAttributes({ today: new Array(24).fill(25) }, 'ct/kWh', D0)[0], 0.25, 'Nord Pool in cents');
+// Zonneplan hourly forecast, in 1e-7 €; also has tomorrow, which falls outside today
+const zp = pricesFromAttributes({ forecast: [{ datetime: iso(0), electricity_price: 2513066 }, { datetime: iso(1), electricity_price: -100000 }, { datetime: iso(30), electricity_price: 1 }] }, '€/kWh', D0);
+close(zp[0], 0.2513066, 'Zonneplan hourly price'); close(zp[4], -0.01, 'negative price'); close(zp[7], -0.01, 'an hour covers four slots');
+assert.equal(zp[8], null, 'no price yet for later hours');
+// Zonneplan quarter-hourly forecast
+const zq = pricesFromAttributes({ forecast: [{ start_date: iso(0.25), end_date: iso(0.5), price_tax_included: { amount: 3000000 } }] }, '€/kWh', D0);
+assert.deepEqual([zq[0], zq[1], zq[2]], [null, 0.3, null], 'Zonneplan quarter-hour price');
+close(pricesFromAttributes({ raw_today: [{ start: iso(2), end: iso(3), value: 0.12 }] }, '€/kWh', D0)[9], 0.12, 'Nord Pool raw_today');
 
 // The first guess at sensors picks the right ones out of a typical mix, and skips phones and the car for the home battery.
 const st = (id, device_class, unit, name = '') => ({ entity_id: id, attributes: { device_class, unit_of_measurement: unit, friendly_name: name } });

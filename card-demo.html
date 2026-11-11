@@ -36,7 +36,7 @@ const r = simulate({
   ev: { on: true, kwh: 75, cons: 16.5, km: 50, from: 18, until: 7.5, chargerKw: 11, eff: 0.9, target: 80, mode: 'cheap' },
 }, SAMPLE.summer);
 
-// Values as real integrations report them: solar in W, battery positive while charging (the config inverts it)
+// Values as real integrations report them (prices like Zonneplan's forecast attribute): solar in W, battery positive while charging (the config inverts it)
 const SENSORS = {
   'sensor.solar_power': [(i) => Math.round(r.solar[i] * 1000), 'W'],
   'sensor.grid_power': [(i) => r.grid[i].toFixed(3), 'kW'],
@@ -70,7 +70,7 @@ const hass = () => {
   const i = slotNow(), states = { 'weather.home': { state: 'sunny', attributes: {} },
     'sun.sun': { state: 'above_horizon', attributes: { next_rising: new Date(+start + 8.5 * 3600e3).toISOString(), next_setting: new Date(+start + 17 * 3600e3).toISOString() } } };
   for (const [id, [f, unit]] of Object.entries(SENSORS)) {
-    states[id] = { state: String(f(i)), attributes: { unit_of_measurement: unit, ...(id.includes('price') ? { today: r.buy.filter((_, k) => k % 4 === 0) } : {}) } };
+    states[id] = { state: String(f(i)), attributes: { unit_of_measurement: unit, ...(id.includes('price') ? { forecast: r.buy.filter((_, k) => k % 4 === 0).map((p, h) => ({ datetime: new Date(+start + h * 3600e3).toISOString(), electricity_price: Math.round(p * 1e7) })) } : {}) } };
   }
   const q = new URLSearchParams(location.search); // ?lang=nl&currency=USD to try other languages and currencies
   return {

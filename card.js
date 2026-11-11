@@ -3,7 +3,7 @@
 import { createScene } from './scene.js';
 import { daylight, N, DT } from './sim.js';
 import { createChart, renderLabels, UI_CSS, hhmm, esc, kwh, pct, fmt, tr, setLocale } from './ui.js';
-import { checkConfig, toValue, weatherFactor, historyPoints, bucket, pricesFromAttribute, buildDay, guessEntities, toFormData, fromFormData, POWER_KEYS, entitiesFromEnergyPrefs, devicesFromEnergyPrefs, energyStatsFromPrefs, dayTotals, forecastSlots, cheapestHours, sunHours, actionFor } from './ha-data.js';
+import { checkConfig, toValue, weatherFactor, historyPoints, bucket, pricesFromAttributes, buildDay, guessEntities, toFormData, fromFormData, POWER_KEYS, entitiesFromEnergyPrefs, devicesFromEnergyPrefs, energyStatsFromPrefs, dayTotals, forecastSlots, cheapestHours, sunHours, actionFor } from './ha-data.js';
 
 const LABEL_ENTITY = { solar: 'solar', home: 'home', grid: 'grid', batt: 'battery', ev: 'ev' };
 const HISTORY_EVERY = 5 * 60e3, CHART_EVERY = 5e3, SCRUB_HOLD = 15e3;
@@ -264,7 +264,7 @@ class EnergySceneCard extends HTMLElement {
       if (!st) { missing.push(id); continue; }
       if (k === 'weather') { this.weather = weatherFactor(st.state); continue; }
       this.live[k] = toValue(k, st.state, st.attributes.unit_of_measurement, invert.includes(k));
-      if (k === 'price') prices = pricesFromAttribute(st.attributes.today);
+      if (k === 'price') prices = pricesFromAttributes(st.attributes, st.attributes.unit_of_measurement, +midnight());
     }
     if (!e.grid && this.prefsAsked) missing.push(tr('no grid power sensor. Pick one in the card editor, or add one to the Energy dashboard'));
     missing.push(...this.devices.filter((d) => !hass.states[d.entity]).map((d) => d.entity));
