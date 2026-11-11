@@ -82,11 +82,21 @@ dt i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margi
   border-radius: 6px; padding: 5px; }
 .check { display: flex; gap: 8px; margin: 8px 0; color: var(--ink2); }
 .note { color: var(--muted); font-size: 12px; margin: 6px 0; }
+#toggles, #closeSettings { display: none; }
 @media (max-width: 900px) {
   body { display: block; }
-  main { height: auto; }
-  #stage { height: 60vh; }
-  aside { height: auto; border-left: 0; }
+  main { height: 100vh; height: 100dvh; }
+  #stage { min-height: 200px; }
+  #toggles { display: flex; gap: 6px; position: absolute; top: 12px; right: 12px; z-index: 2; }
+  #toggles button { background: rgba(26, 26, 25, .88); border: 1px solid rgba(255, 255, 255, .1); padding: 8px 12px; }
+  #toggles button[aria-expanded=true] { background: var(--axis); border-color: var(--ink2); }
+  #charts { display: none; max-height: 55dvh; overflow-y: auto; }
+  body.show-chart #charts { display: block; }
+  aside { display: none; position: fixed; inset: 0; z-index: 5; border-left: 0; height: 100dvh; }
+  body.show-settings aside { display: block; }
+  h1 { display: flex; align-items: center; }
+  #closeSettings { display: block; }
+  #clock { left: 12px; bottom: 12px; }
 }
 </style>
 </head>
@@ -100,6 +110,10 @@ dt i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margi
       <button id="speed" aria-label="Playback speed">1x</button>
     </div>
     <div id="pop" role="dialog" hidden></div>
+    <div id="toggles">
+      <button data-panel="chart" aria-expanded="false" aria-controls="charts">Chart</button>
+      <button data-panel="settings" aria-expanded="false" aria-controls="settings">Settings</button>
+    </div>
   </div>
   <section id="charts">
     <div id="legend"></div>
@@ -107,8 +121,8 @@ dt i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margi
     <div id="tip"></div>
   </section>
 </main>
-<aside>
-  <h1>Home energy simulator</h1>
+<aside id="settings">
+  <h1>Home energy simulator <button class="x" id="closeSettings" aria-label="Close settings">✕</button></h1>
   <div id="results"></div>
   <div id="controls"></div>
   <p class="note">Prices follow the Zonneplan dynamic tariff: hourly day-ahead price plus 21% VAT, €0.02 purchase fee and €0.1108 energy tax per kWh. Fixed delivery and grid operator costs are not included.</p>

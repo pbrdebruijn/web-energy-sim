@@ -205,6 +205,7 @@ $('legend').innerHTML = `<span>${dot('#898781')}Price</span>` + ['solar', 'home'
 
 function drawChart() {
   const W = svg.clientWidth;
+  if (!W) return; // hidden on phones until the Chart button opens it
   PW = W - ML - MR;
   svg.setAttribute('height', CH);
   svg.setAttribute('viewBox', `0 0 ${W} ${CH}`);
@@ -263,6 +264,15 @@ svg.addEventListener('pointermove', (e) => {
 svg.addEventListener('pointerleave', () => { tip.style.display = 'none'; $('cross').setAttribute('visibility', 'hidden'); });
 addEventListener('resize', drawChart);
 
+// ---- Phone layout: chart and settings start hidden and open from the buttons on the scene ----
+const togglePanel = (name, on = !document.body.classList.contains(`show-${name}`)) => {
+  document.body.classList.toggle(`show-${name}`, on);
+  document.querySelector(`[data-panel=${name}]`).setAttribute('aria-expanded', on);
+  if (name === 'chart' && on) drawChart(); // the svg has no width while hidden
+};
+$('toggles').addEventListener('click', (e) => { const b = e.target.closest('[data-panel]'); if (b) togglePanel(b.dataset.panel); });
+$('closeSettings').onclick = () => togglePanel('settings', false);
+
 // ---- Playback and scene ----
 const now = new Date();
 let t = now.getHours() + now.getMinutes() / 60, playing = true, speed = 1, last = performance.now(), labelKey = '';
@@ -309,8 +319,8 @@ function frame(ts) {
   const key = `${i}/${version}`;
   if (key !== labelKey) { labelKey = key; renderLabels(i, away); }
   $('time').textContent = hhmm(Math.floor(t * 12) / 12);
-  const ph = $('ph');
-  ph.setAttribute('x1', xOf(t)); ph.setAttribute('x2', xOf(t));
+  const ph = $('ph'); // missing until the chart is first drawn
+  if (ph) { ph.setAttribute('x1', xOf(t)); ph.setAttribute('x2', xOf(t)); }
   scene.update({
     t, rise, set: sunset, weather: cfg.weather, kWp: cfg.kWp,
     solar: r.solar[i], home: r.home[i], ev: r.ev[i], batt: r.batt[i], grid: r.grid[i],

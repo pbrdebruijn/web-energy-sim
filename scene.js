@@ -166,6 +166,8 @@ export function createScene(container) {
     const { clientWidth: w, clientHeight: h } = container;
     renderer.setSize(w, h);
     camera.aspect = w / h;
+    // Below aspect 1.2, widen the vertical view so narrow (portrait) screens still show the whole lot side to side.
+    camera.fov = 2 * THREE.MathUtils.radToDeg(Math.atan(Math.tan(THREE.MathUtils.degToRad(16)) * Math.max(1, 1.2 / camera.aspect)));
     camera.updateProjectionMatrix();
   };
   new ResizeObserver(resize).observe(container);
