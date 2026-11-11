@@ -27,7 +27,7 @@ export function setLocale(lang = 'en', currency = 'EUR') {
 
 const TEXT = {
   nl: {
-    Solar: 'Zon', 'Home use': 'Verbruik huis', Grid: 'Net', exporting: 'teruglevering', importing: 'afname', idle: 'rust', 'per kWh': 'per kWh',
+    Totals: 'Totalen', Solar: 'Zon', 'Home use': 'Verbruik huis', Grid: 'Net', exporting: 'teruglevering', importing: 'afname', idle: 'rust', 'per kWh': 'per kWh',
     'Home battery': 'Thuisbatterij', Off: 'Uit', Battery: 'Batterij', discharging: 'ontladen', charging: 'laden', 'on the road': 'onderweg',
     'plugged in': 'aangesloten', solar: 'zon', battery: 'batterij', grid: 'net', EV: 'Auto', Price: 'Prijs', 'Cheapest hours': 'Goedkoopste uren',
     'Negative price, you get paid': 'Negatieve prijs, je krijgt betaald', 'Solar forecast': 'Zonverwachting',
@@ -41,7 +41,7 @@ const TEXT = {
     'no grid power sensor. Pick one in the card editor, or add one to the Energy dashboard': 'geen sensor voor netvermogen. Kies er een in de kaarteditor, of voeg er een toe aan het Energie-dashboard',
   },
   de: {
-    Solar: 'Solar', 'Home use': 'Hausverbrauch', Grid: 'Netz', exporting: 'Einspeisung', importing: 'Bezug', idle: 'Ruhe', 'per kWh': 'pro kWh',
+    Totals: 'Summen', Solar: 'Solar', 'Home use': 'Hausverbrauch', Grid: 'Netz', exporting: 'Einspeisung', importing: 'Bezug', idle: 'Ruhe', 'per kWh': 'pro kWh',
     'Home battery': 'Hausbatterie', Off: 'Aus', Battery: 'Batterie', discharging: 'entlädt', charging: 'lädt', 'on the road': 'unterwegs',
     'plugged in': 'angesteckt', solar: 'Solar', battery: 'Batterie', grid: 'Netz', EV: 'E-Auto', Price: 'Preis', 'Cheapest hours': 'Günstigste Stunden',
     'Negative price, you get paid': 'Negativer Preis, du wirst bezahlt', 'Solar forecast': 'Solarprognose',
@@ -72,6 +72,14 @@ export const UI_CSS = `
   background: rgba(26, 26, 25, .88); border: 1px solid rgba(255, 255, 255, .1); border-radius: 10px; padding: 8px 12px; }
 .clock time { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .clock small { color: #c3c2b7; white-space: nowrap; line-height: 1.25; }
+.totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; padding: 10px 14px 0; }
+.totals[hidden] { display: none; }
+.totals div { background: var(--tile, rgba(127, 127, 127, .12)); border-radius: 8px; padding: 6px 10px; font-size: 12px; color: var(--ink2); }
+.totals b { display: block; font-size: 17px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.totals-btn { position: absolute; right: 12px; bottom: 12px; z-index: 1; cursor: pointer; font: inherit; font-size: 13px; color: #f0efec;
+  background: rgba(26, 26, 25, .88); border: 1px solid rgba(255, 255, 255, .1); border-radius: 8px; padding: 6px 10px; }
+.totals-btn[aria-pressed="true"] { border-color: #f0efec; }
+.totals-btn[hidden] { display: none; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--ink2); font-size: 12px; margin-bottom: 4px; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; }
 .chart { display: block; width: 100%; cursor: crosshair; touch-action: none; }
@@ -85,6 +93,28 @@ export const UI_CSS = `
 `;
 
 // r: the day as 15-minute arrays (see sim.js). show: { batt, ev } say which devices exist. away: the car is out driving.
+// Tiles for the totals row: [[value, English label], ...], labels translated
+export const totalsHtml = (items) => items.filter(Boolean).map(([v, label]) => `<div><b>${v}</b>${tr(label)}</div>`).join('');
+
+// The "Totals" button on the scene shows or hides the totals row; the choice is remembered in this browser.
+// Returns a function to call after the tiles change, so the button only shows when there are totals.
+export function totalsToggle(btn, row, key, on) {
+  try { const v = localStorage.getItem(key); if (v !== null) on = v === '1'; } catch { /* storage blocked: use the default */ }
+  btn.textContent = tr('Totals');
+  const apply = () => {
+    btn.hidden = !row.innerHTML;
+    row.hidden = !on || !row.innerHTML;
+    btn.setAttribute('aria-pressed', String(on));
+  };
+  btn.onclick = () => {
+    on = !on;
+    try { localStorage.setItem(key, on ? '1' : '0'); } catch { /* not remembered, still toggles */ }
+    apply();
+  };
+  apply();
+  return apply;
+}
+
 export function renderLabels(L, r, i, { batt, ev, evName: rawName = 'EV', away = false }) {
   const evName = esc(rawName); // comes from the card config, which users copy from forums
   const bar = (v) => `<span class="soc"><i style="width:${v * 100}%"></i></span>`;

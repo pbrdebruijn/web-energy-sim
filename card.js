@@ -2,7 +2,7 @@
 // and the chart below shows today so far. Built into dist/energy-scene-card.js by `npm run build`.
 import { createScene } from './scene.js';
 import { daylight, N, DT } from './sim.js';
-import { createChart, renderLabels, UI_CSS, hhmm, esc, kwh, pct, fmt, tr, setLocale } from './ui.js';
+import { createChart, renderLabels, UI_CSS, hhmm, esc, kwh, pct, fmt, tr, setLocale, totalsHtml, totalsToggle } from './ui.js';
 import { checkConfig, toValue, weatherFactor, historyPoints, bucket, pricesFromAttributes, buildDay, guessEntities, toFormData, fromFormData, POWER_KEYS, entitiesFromEnergyPrefs, devicesFromEnergyPrefs, energyStatsFromPrefs, dayTotals, forecastSlots, cheapestHours, sunHours, actionFor } from './ha-data.js';
 
 const LABEL_ENTITY = { solar: 'solar', home: 'home', grid: 'grid', batt: 'battery', ev: 'ev' };
@@ -12,7 +12,8 @@ const FRAME_MS = 1000 / 30 - 2;
 
 const CARD_CSS = `
 :host { display: block; --ink: var(--primary-text-color, #f0efec); --ink2: var(--secondary-text-color, #c3c2b7);
-  --muted: var(--secondary-text-color, #898781); --hair: var(--divider-color, #2c2c2a); --axis: var(--divider-color, #383835); }
+  --muted: var(--secondary-text-color, #898781); --hair: var(--divider-color, #2c2c2a); --axis: var(--divider-color, #383835);
+  --tile: var(--secondary-background-color, rgba(127, 127, 127, .12)); }
 ha-card { overflow: hidden; }
 .stage { position: relative; overflow: hidden; }
 .stage canvas { display: block; }
@@ -24,9 +25,6 @@ ha-card { overflow: hidden; }
   font-size: 12px; color: #c3c2b7; background: rgba(26, 26, 25, .88); border: 1px solid rgba(255, 255, 255, .1); border-left: 3px solid #3987e5; }
 .devices button:focus-visible { outline: 2px solid #3987e5; }
 .devices b { color: #f0efec; font-variant-numeric: tabular-nums; }
-.totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; padding: 10px 14px 0; }
-.totals div { background: var(--secondary-background-color, rgba(127, 127, 127, .12)); border-radius: 8px; padding: 6px 10px; font-size: 12px; color: var(--ink2); }
-.totals b { display: block; font-size: 17px; color: var(--ink); font-variant-numeric: tabular-nums; }
 /* Narrow cards: smaller labels with only the main number */
 .stage { container-type: inline-size; }
 @container (max-width: 480px) {
@@ -102,7 +100,7 @@ class EnergySceneCard extends HTMLElement {
     const e = this.entities, withChart = this.config.chart !== false;
     const root = this.shadowRoot ?? this.attachShadow({ mode: 'open' });
     root.innerHTML = `<style>${UI_CSS}${CARD_CSS}</style><ha-card>
-      <div class="stage" style="height:${this.height}px"><div class="clock"><time></time><small></small></div><div class="devices"></div></div>
+      <div class="stage" style="height:${this.height}px"><div class="clock"><time></time><small></small></div><div class="devices"></div><button class="totals-btn" hidden></button></div>
       <div class="totals" hidden></div>
       <p class="warn" hidden></p>
       ${withChart ? `<section class="charts"><div class="legend"></div>
@@ -149,6 +147,7 @@ class EnergySceneCard extends HTMLElement {
     this.io = new IntersectionObserver(([entry]) => { this.visible = entry.isIntersecting; if (this.visible) this.start(); });
     this.io.observe(this);
     this.timer = setInterval(() => { this.loadHistory(); this.loadTotals(); this.loadForecast(); }, HISTORY_EVERY);
+    this.applyTotals = totalsToggle(q('.totals-btn'), q('.totals'), 'energy-scene-card:totals', true);
     this.renderTotals();
     if (this._hass) { this.loadHistory(); this.applyLive(); }
   }
@@ -235,12 +234,13 @@ class EnergySceneCard extends HTMLElement {
   renderTotals() {
     const el = this.q?.('.totals'), T = this.totals;
     if (!el || !T) return;
-    el.hidden = false;
-    el.innerHTML = [
+    el.innerHTML = totalsHtml([
       [kwh(T.imported), 'Imported today'], [kwh(T.exported), 'Exported today'], [kwh(T.solar), 'Solar today'],
       T.selfSufficient != null && [pct(T.selfSufficient), 'Covered without the grid'],
       T.cost != null && [fmt.money(T.cost), 'Energy cost today'],
-    ].filter(Boolean).map(([v, label]) => `<div><b>${v}</b>${tr(label)}</div>`).join('');
+    ]);
+    this.q('.totals-btn').textContent = tr('Totals');
+    this.applyTotals();
   }
 
   // Merge the current states into today's history; the slot for "now" shows the live values.

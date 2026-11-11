@@ -16,7 +16,7 @@
 <style>
 :root {
   color-scheme: dark;
-  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+  --tile: #0d0d0d; --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
   --hair: #2c2c2a; --axis: #383835;
   --solar: #c98500; --home: #3987e5; --ev: #199e70; --batt: #9085e9; --grid: #d95926;
 }
@@ -24,7 +24,8 @@
 html, body { height: 100%; margin: 0; }
 body { background: var(--page); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
   display: grid; grid-template-columns: minmax(0, 1fr) 380px; }
-main { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; height: 100vh; }
+main { display: grid; grid-template-rows: minmax(0, 1fr) auto auto; min-height: 0; height: 100vh; }
+#totals { background: var(--surface); border-top: 1px solid var(--hair); }
 #stage { position: relative; overflow: hidden; min-height: 280px; }
 #stage canvas { display: block; }
 button { font: inherit; color: var(--ink); background: var(--axis); border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
@@ -93,12 +94,14 @@ dt i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margi
       <button id="speed" aria-label="Playback speed">1x</button>
     </div>
     <div id="pop" role="dialog" hidden></div>
+    <button id="totalsBtn" class="totals-btn" hidden></button>
     <div id="toggles">
       <button data-panel="chart" aria-expanded="false" aria-controls="charts">Chart</button>
       <button data-panel="settings" aria-expanded="false" aria-controls="settings">Settings</button>
       <button class="share" aria-label="Share" title="Share a link that opens the simulator with these settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg><span></span></button>
     </div>
   </div>
+  <div id="totals" class="totals" hidden></div>
   <section id="charts">
     <div id="legend" class="legend"></div>
     <svg id="chart" class="chart" role="img" aria-label="Price, power and charge level over the day"></svg>

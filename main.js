@@ -1,6 +1,6 @@
 import { simulate, daylight, SAMPLE, N, DT } from './sim.js';
 import { createScene, COLORS } from './scene.js';
-import { createChart, renderLabels, UI_CSS, hhmm, eur, kwh, pct, dot } from './ui.js';
+import { createChart, renderLabels, UI_CSS, hhmm, eur, kwh, pct, dot, totalsHtml, totalsToggle } from './ui.js';
 
 document.head.append(Object.assign(document.createElement('style'), { textContent: UI_CSS }));
 
@@ -221,7 +221,14 @@ function renderResults() {
       <div><b>${kwh(T.battLoss + T.chargerLoss)}</b>Lost in battery and charger</div>
     </div>
     ${priceNote ? `<p class="note">${priceNote}</p>` : ''}`;
+  // The same day totals as a row under the scene, shown with the Totals button
+  $('totals').innerHTML = totalsHtml([
+    [eur(T.cost), 'Energy bill for this day'], [pct(Math.max(0, T.selfSufficient)), 'Covered without the grid'],
+    [kwh(T.imp), 'Imported'], [kwh(T.exp), 'Exported'], [kwh(T.solar), 'Solar yield'],
+  ]);
+  applyTotals();
 }
+const applyTotals = totalsToggle($('totalsBtn'), $('totals'), 'web-energy-sim:totals', false);
 
 // ---- Chart ----
 const chart = createChart({ svg: $('chart'), tip: $('tip'), legend: $('legend'), box: $('charts') }, (h) => { t = h; });
