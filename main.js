@@ -49,6 +49,26 @@ const SECTIONS = [
 ];
 const ITEMS = Object.fromEntries(SECTIONS.flatMap((s) => s[3]).map((c) => [c.p, c]));
 
+// ---- Settings in the URL: #c=<base64url of the cfg JSON>, so a link restores every setting ----
+const encodeCfg = () => btoa(JSON.stringify(cfg)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+// The hash comes from whoever shared the link: take only known settings of the right type, clamp ranges, check choices.
+function restoreCfg(hash) {
+  const m = hash.match(/^#c=([\w-]+)$/);
+  let s;
+  try { s = JSON.parse(atob(m[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch { return false; }
+  for (const p of [...Object.keys(ITEMS), 'batt.on', 'ev.on']) {
+    let v;
+    try { v = p.split('.').reduce((o, k) => o[k], s); } catch { continue; }
+    const c = ITEMS[p], d = get(p);
+    if (typeof v !== typeof d || (typeof v === 'number' && !Number.isFinite(v))) continue;
+    if (c?.opts && !c.opts.some(([x]) => x === v)) continue;
+    if (c?.min !== undefined) v = Math.min(c.max / c.k, Math.max(c.min / c.k, v));
+    set(p, v);
+  }
+  return true;
+}
+const shared = restoreCfg(location.hash);
+
 const hhmm = (h) => `${String(Math.floor(h) % 24).padStart(2, '0')}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
 const fmt = (c, v) => c.unit === 'h' ? hhmm(v) : `${+(v * c.k).toFixed(2)} ${c.unit}`;
 const eur = (v, d = 2) => `${v < 0 ? '-' : ''}€${Math.abs(v).toFixed(d)}`;
@@ -126,7 +146,7 @@ pop.addEventListener('toggle', placePop, true); // details toggle does not bubbl
 
 let spot = SAMPLE.winter, priceNote = '', r, version = 0;
 
-async function loadPrices() {
+async function loadPrices(keepMonth = false) {
   priceNote = '';
   if (cfg.priceSrc === 'live') {
     try {
@@ -143,8 +163,10 @@ async function loadPrices() {
     }
   } else {
     spot = SAMPLE[cfg.priceSrc];
-    cfg.month = cfg.priceSrc === 'summer' ? 5 : 10; // keep the sun in step with the sample prices
-    sync('month');
+    if (!keepMonth) { // keep the sun in step with the sample prices, unless a shared link set the month
+      cfg.month = cfg.priceSrc === 'summer' ? 5 : 10;
+      sync('month');
+    }
   }
   recompute();
 }
@@ -152,6 +174,7 @@ async function loadPrices() {
 function recompute() {
   r = simulate(cfg, spot);
   version++;
+  history.replaceState(null, '', `#c=${encodeCfg()}`);
   renderResults();
   drawChart();
 }
@@ -331,5 +354,15 @@ function frame(ts) {
 
 recompute();
 requestAnimationFrame(frame);
-loadPrices();
+loadPrices(shared);
+
+$('share').onclick = async () => {
+  const url = location.href, b = $('share');
+  try {
+    if (navigator.share) await navigator.share({ title: document.title, url });
+    else { await navigator.clipboard.writeText(url); b.textContent = 'Link copied'; setTimeout(() => (b.textContent = 'Copy link'), 1500); }
+  } catch (err) {
+    if (err.name !== 'AbortError') prompt('Copy this link', url); // clipboard blocked: let the user copy it by hand
+  }
+};
 window.sim = { setTime: (h) => { t = h; }, pause: () => { if (playing) $('play').click(); } }; // for screenshots and debugging

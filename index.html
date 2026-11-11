@@ -60,6 +60,7 @@ details.more summary { cursor: pointer; color: var(--ink2); font-size: 13px; }
 details.more summary:hover { color: var(--ink); }
 aside { background: var(--surface); border-left: 1px solid var(--hair); overflow-y: auto; height: 100vh; padding: 16px; }
 h1 { font-size: 16px; margin: 0 0 12px; }
+#share { margin-bottom: 14px; }
 h2 { font-size: 13px; margin: 18px 0 8px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--ink);
   display: flex; align-items: center; gap: 8px; }
 h2 i { width: 10px; height: 10px; border-radius: 2px; }
@@ -123,6 +124,7 @@ dt i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margi
 </main>
 <aside id="settings">
   <h1>Home energy simulator <button class="x" id="closeSettings" aria-label="Close settings">✕</button></h1>
+  <button id="share" title="A link that opens the simulator with these settings">Copy link</button>
   <div id="results"></div>
   <div id="controls"></div>
   <p class="note">Prices follow the Zonneplan dynamic tariff: hourly day-ahead price plus 21% VAT, €0.02 purchase fee and €0.1108 energy tax per kWh. Fixed delivery and grid operator costs are not included.</p>
