@@ -77,6 +77,22 @@ Every sensor is optional. Sensors you leave out come from the Energy dashboard w
 | `chart` | `true` | Set to `false` to hide the chart of today. |
 | `solar_kwp` | `5.5` | Your solar peak power in kWp. The scene shows one panel per 0.45 kWp, and the panels glow by output against this number. |
 | `ev_name` | `EV` | Name on the car's label. |
+| `devices` | from the Energy dashboard | Extra devices to show, see below. |
+
+### Devices
+
+Show up to 4 extra devices, like a heat pump or a washing machine. Each gets a small model along the front of the house that spins and lights up while it uses power, and a line in the top right corner with its power. Click that line for its details and history.
+
+```yaml
+devices:
+  - entity: sensor.heat_pump_power
+    type: heat_pump
+    name: Heat pump
+  - entity: sensor.washing_machine_power
+    type: washing_machine
+```
+
+`type` is one of `heat_pump`, `ac`, `boiler`, `washing_machine` or `other`, and `name` is optional. Without a `devices` list, the card shows the individual devices from the Energy dashboard that have a power sensor. Devices show their power right now. They are part of the house use, so the chart does not draw them separately.
 
 ### Entities
 

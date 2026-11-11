@@ -17,9 +17,10 @@ const PATHS = {
 };
 const LABEL_AT = { solar: [-2, 6.3, -1], home: [-4.4, 1.2, 2.6], batt: [2.6, 3.1, -3.6], grid: [-9, 6.6, 7.2], ev: [6.6, 2.5, 1] };
 const PARTICLES = 16;
+const DEVICE_X = [-0.75, 1.25, -5.3, -3.5]; // spots along the front wall, clear of the door and path
 const DOT = Object.fromEntries(Object.entries(COLORS).map(([k, c]) => [k, new THREE.Color(c)]));
 
-export function createScene(container, { maxPixelRatio = 2 } = {}) {
+export function createScene(container, { maxPixelRatio = 2, devices = [] } = {}) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, maxPixelRatio));
   renderer.shadowMap.enabled = true;
@@ -179,6 +180,31 @@ export function createScene(container, { maxPixelRatio = 2 } = {}) {
     flows[key] = { curve, dots, phase: 0, len: curve.getLength() };
   }
 
+  // Extra devices (heat pump, AC, boiler, washing machine) stand along the front of the house, clear of the door and path.
+  // They show their power by spinning faster and glowing; the card lists their numbers in a corner.
+  const devs = devices.slice(0, DEVICE_X.length).map(({ type }, k) => {
+    const g = new THREE.Group(), x = DEVICE_X[k];
+    g.position.set(x, 0, 2.55);
+    scene.add(g);
+    const body = mat(type === 'heat_pump' ? '#c9ccd1' : '#eef0f2');
+    const glow = new THREE.MeshBasicMaterial({ color: '#333' });
+    let spinner = null;
+    if (type === 'boiler') cast(add(new THREE.CylinderGeometry(0.3, 0.3, 1.3, 16), body, 0, 0.65, 0, g));
+    else {
+      const [w, h, d] = { heat_pump: [0.95, 0.75, 0.42], ac: [0.8, 0.55, 0.32], washing_machine: [0.6, 0.85, 0.55] }[type] ?? [0.5, 0.5, 0.4];
+      cast(box(w, h, d, body, 0, h / 2, 0, g));
+      if (type !== 'other') {
+        spinner = new THREE.Group();
+        spinner.position.set(type === 'washing_machine' ? 0 : -w * 0.15, h * 0.5, d / 2 + 0.02);
+        add(new THREE.CylinderGeometry(h * 0.33, h * 0.33, 0.04, 20).rotateX(Math.PI / 2), mat('#2f3338'), 0, 0, 0, spinner);
+        box(h * 0.6, h * 0.08, 0.05, mat('#9aa1a9'), 0, 0, 0.02, spinner); // fan blade or drum paddle, so the spin shows
+        g.add(spinner);
+      }
+    }
+    box(0.12, 0.06, 0.04, glow, type === 'boiler' ? 0 : 0.3, type === 'boiler' ? 1.1 : 0.1, 0.32, g);
+    return { spinner, glow, type };
+  });
+
   // HTML labels that follow the devices
   const labels = {};
   for (const key of Object.keys(LABEL_AT)) {
@@ -207,7 +233,7 @@ export function createScene(container, { maxPixelRatio = 2 } = {}) {
   const tmp = V(0, 0, 0);
   let clock = 0;
 
-  // s: { t, month, rise, set, weather, kWp, solar, home, ev, batt, grid, battSoc, battOn, evOn, evAway (0 parked..1 gone), evPlugged }
+  // s: { t, month, rise, set, weather, kWp, solar, home, ev, batt, grid, battSoc, battOn, evOn, evAway (0 parked..1 gone), evPlugged, devices: [kW] }
   function update(s, dt) {
     clock += dt;
     const dayLen = s.set - s.rise;
@@ -257,6 +283,12 @@ export function createScene(container, { maxPixelRatio = 2 } = {}) {
       f.dots.count = n;
       f.dots.instanceMatrix.needsUpdate = true;
     }
+
+    devs.forEach((d, k) => {
+      const p = Math.max(0, s.devices?.[k] ?? 0);
+      if (d.spinner) d.spinner.rotation.z -= dt * Math.min(12, p * 6);
+      d.glow.color.set(p > 0.02 ? COLORS.home : '#333');
+    });
 
     seasons(s.month, day, dt, clock);
 

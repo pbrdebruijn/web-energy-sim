@@ -2,8 +2,8 @@
 // and the chart below shows today so far. Built into dist/energy-scene-card.js by `npm run build`.
 import { createScene } from './scene.js';
 import { daylight, N, DT } from './sim.js';
-import { createChart, renderLabels, UI_CSS, hhmm, eur } from './ui.js';
-import { checkConfig, toValue, weatherFactor, historyPoints, bucket, pricesFromAttribute, buildDay, guessEntities, toFormData, fromFormData, POWER_KEYS, entitiesFromEnergyPrefs } from './ha-data.js';
+import { createChart, renderLabels, UI_CSS, hhmm, eur, esc } from './ui.js';
+import { checkConfig, toValue, weatherFactor, historyPoints, bucket, pricesFromAttribute, buildDay, guessEntities, toFormData, fromFormData, POWER_KEYS, entitiesFromEnergyPrefs, devicesFromEnergyPrefs } from './ha-data.js';
 
 const LABEL_ENTITY = { solar: 'solar', home: 'home', grid: 'grid', batt: 'battery', ev: 'ev' };
 const HISTORY_EVERY = 5 * 60e3, CHART_EVERY = 5e3, SCRUB_HOLD = 15e3;
@@ -19,6 +19,11 @@ ha-card { overflow: hidden; }
 .clock { left: 12px; bottom: 12px; padding: 6px 10px; }
 .clock time { font-size: 20px; }
 .charts { position: relative; padding: 10px 14px 6px; }
+.devices { position: absolute; top: 10px; right: 10px; z-index: 1; display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
+.devices button { all: unset; cursor: pointer; display: flex; justify-content: space-between; gap: 12px; padding: 3px 9px; border-radius: 6px;
+  font-size: 12px; color: #c3c2b7; background: rgba(26, 26, 25, .88); border: 1px solid rgba(255, 255, 255, .1); border-left: 3px solid #3987e5; }
+.devices button:focus-visible { outline: 2px solid #3987e5; }
+.devices b { color: #f0efec; font-variant-numeric: tabular-nums; }
 .warn { margin: 0; padding: 8px 14px; color: var(--error-color, #db4437); font-size: 13px; }
 `;
 
@@ -59,10 +64,15 @@ class EnergySceneCard extends HTMLElement {
   // Sensors from the Energy dashboard, overridden by the card config
   get entities() { return { ...this.fromEnergy, ...this.config.entities }; }
 
+  // Extra devices from the card config, or else the Energy dashboard's devices with a power sensor
+  get devices() { return this.config.devices ?? this.energyDevices ?? []; }
+
   async loadEnergyPrefs() {
     this.prefsAsked = true;
-    this.fromEnergy = entitiesFromEnergyPrefs(await energyPrefs(this._hass));
-    const added = Object.keys(this.fromEnergy).some((k) => !this.config?.entities?.[k]);
+    const prefs = await energyPrefs(this._hass);
+    this.fromEnergy = entitiesFromEnergyPrefs(prefs);
+    this.energyDevices = devicesFromEnergyPrefs(prefs);
+    const added = Object.keys(this.fromEnergy).some((k) => !this.config?.entities?.[k]) || (!this.config?.devices && this.energyDevices.length > 0);
     if (added && this.scene) { this.teardown(); this.setup(); } // rebuild once so labels, chart and flows include them
   }
 
@@ -74,7 +84,7 @@ class EnergySceneCard extends HTMLElement {
     const e = this.entities, withChart = this.config.chart !== false;
     const root = this.shadowRoot ?? this.attachShadow({ mode: 'open' });
     root.innerHTML = `<style>${UI_CSS}${CARD_CSS}</style><ha-card>
-      <div class="stage" style="height:${this.height}px"><div class="clock"><time></time><small></small></div></div>
+      <div class="stage" style="height:${this.height}px"><div class="clock"><time></time><small></small></div><div class="devices"></div></div>
       <p class="warn" hidden></p>
       ${withChart ? `<section class="charts"><div class="legend"></div>
         <svg class="chart" role="img" aria-label="Price, power and charge level today"></svg><div class="tip"></div></section>` : ''}
@@ -82,17 +92,20 @@ class EnergySceneCard extends HTMLElement {
     const q = (s) => root.querySelector(s);
     this.q = q;
     // Fill cost scales with pixel count, and 1.5 still looks sharp at card size
-    this.scene = createScene(q('.stage'), { maxPixelRatio: 1.5 });
+    this.scene = createScene(q('.stage'), { maxPixelRatio: 1.5, devices: this.devices });
     for (const [key, el] of Object.entries(this.scene.labels)) {
       const entityId = e[LABEL_ENTITY[key]];
       if (!entityId) continue;
       el.tabIndex = 0;
       el.setAttribute('role', 'button');
       el.title = 'Show details and history';
-      const open = () => this.dispatchEvent(new CustomEvent('hass-more-info', { bubbles: true, composed: true, detail: { entityId } }));
+      const open = () => this.moreInfo(entityId);
       el.onclick = open;
       el.onkeydown = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } };
     }
+    // Device chips: one button each, filled in by frame()
+    q('.devices').innerHTML = this.devices.map((d, k) => `<button data-k="${k}" title="Show details and history"></button>`).join('');
+    q('.devices').onclick = (ev) => { const b = ev.target.closest('button'); if (b) this.moreInfo(this.devices[b.dataset.k].entity); };
     this.show = { batt: !!(e.battery || e.battery_soc), ev: !!(e.ev || e.ev_soc), price: !!e.price };
     this.chart = withChart && createChart({ svg: q('.chart'), tip: q('.tip'), legend: q('.legend'), box: q('.charts') }, (h) => {
       this.viewT = h;
@@ -102,6 +115,8 @@ class EnergySceneCard extends HTMLElement {
     if (withChart) this.ro.observe(q('.charts'));
     this.live = {};
     this.seen = {};
+    this.devValues = [];
+    this.devNames = {};
     this.weather = 1;
     this.evAnim = 0;
     this.r = buildDay({});
@@ -123,6 +138,10 @@ class EnergySceneCard extends HTMLElement {
     this.ro?.disconnect();
     this.scene?.dispose();
     this.scene = this.chart = null;
+  }
+
+  moreInfo(entityId) {
+    this.dispatchEvent(new CustomEvent('hass-more-info', { bubbles: true, composed: true, detail: { entityId } }));
   }
 
   warn(text) {
@@ -157,7 +176,15 @@ class EnergySceneCard extends HTMLElement {
   applyLive(force = false) {
     const hass = this._hass, e = this.entities;
     if (!hass || !this.scene) return;
-    if (!force && Object.values(e).every((id) => hass.states[id] === this.seen[id])) return; // nothing of ours changed
+    const ids = [...Object.values(e), ...this.devices.map((d) => d.entity)];
+    if (!force && ids.every((id) => hass.states[id] === this.seen[id])) return; // nothing of ours changed
+    this.devValues = this.devices.map((d) => {
+      const st = hass.states[d.entity];
+      this.seen[d.entity] = st;
+      if (!st) return null;
+      this.devNames[d.entity] = d.name ?? st.attributes.friendly_name ?? d.entity;
+      return toValue('home', st.state, st.attributes.unit_of_measurement);
+    });
     const invert = this.config.invert ?? [], missing = [];
     let prices = null;
     for (const [k, id] of Object.entries(e)) {
@@ -169,6 +196,7 @@ class EnergySceneCard extends HTMLElement {
       if (k === 'price') prices = pricesFromAttribute(st.attributes.today);
     }
     if (!e.grid && this.prefsAsked) missing.push('no grid power sensor. Pick one in the card editor, or add one to the Energy dashboard');
+    missing.push(...this.devices.filter((d) => !hass.states[d.entity]).map((d) => d.entity));
     this.warn(missing.length ? `Entity not found: ${missing.join(', ')}` : this.histError ?? '');
 
     const i = Math.min(N - 1, Math.floor(hourOf(new Date()) / DT));
@@ -212,6 +240,10 @@ class EnergySceneCard extends HTMLElement {
     if (key !== this.labelKey) {
       this.labelKey = key;
       renderLabels(this.scene.labels, r, i, { batt: this.show.batt, ev: this.show.ev, evName: this.config.ev_name ?? 'EV', away });
+      this.q('.devices').querySelectorAll('button').forEach((b, k) => { // devices show their live power, also while replaying earlier today
+        const d = this.devices[k];
+        b.innerHTML = `<span>${esc(this.devNames[d.entity] ?? d.entity)}</span><b>${Math.abs(this.devValues[k] ?? 0).toFixed(1)} kW</b>`;
+      });
       this.q('.clock small').innerHTML = `${live ? 'Now' : 'Earlier today'}${r.buy[i] == null ? '' : `<br>${eur(r.buy[i], 3)} per kWh`}`;
     }
     const clock = hhmm(Math.floor(t * 12) / 12), timeEl = this.q('.clock time');
@@ -221,7 +253,7 @@ class EnergySceneCard extends HTMLElement {
     this.scene.update({
       t, month, rise, set, weather: this.weather, kWp: Number(this.config.solar_kwp ?? 5.5),
       solar: r.solar[i] ?? 0, home: r.home[i] ?? 0, ev: r.ev[i] ?? 0, batt: r.batt[i] ?? 0, grid: r.grid[i] ?? 0,
-      battSoc: r.battSoc[i] ?? 0, battOn: this.show.batt, evOn: this.show.ev, evAway: this.evAnim, evPlugged: !away,
+      battSoc: r.battSoc[i] ?? 0, battOn: this.show.batt, evOn: this.show.ev, evAway: this.evAnim, evPlugged: !away, devices: this.devValues,
     }, dt);
     this.raf = requestAnimationFrame(this.frame);
   };
