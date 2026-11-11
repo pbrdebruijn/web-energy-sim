@@ -68,7 +68,8 @@ class EnergySceneCard extends HTMLElement {
     </ha-card>`;
     const q = (s) => root.querySelector(s);
     this.q = q;
-    this.scene = createScene(q('.stage'));
+    // Fill cost scales with pixel count, and 1.5 still looks sharp at card size
+    this.scene = createScene(q('.stage'), { maxPixelRatio: 1.5 });
     for (const [key, el] of Object.entries(this.scene.labels)) {
       const entityId = e[LABEL_ENTITY[key]];
       if (!entityId) continue;
