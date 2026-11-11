@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createSeasons } from './season.js';
+import { sources } from './sim.js';
 
 export const COLORS = { solar: '#c98500', home: '#3987e5', ev: '#199e70', batt: '#9085e9', grid: '#d95926' };
 
@@ -16,6 +17,7 @@ const PATHS = {
 };
 const LABEL_AT = { solar: [-2, 6.3, -1], home: [-4.4, 1.2, 2.6], batt: [2.6, 3.1, -3.6], grid: [-9, 6.6, 7.2], ev: [6.6, 2.5, 1] };
 const PARTICLES = 16;
+const DOT = Object.fromEntries(Object.entries(COLORS).map(([k, c]) => [k, new THREE.Color(c)]));
 
 export function createScene(container, { maxPixelRatio = 2 } = {}) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -169,8 +171,9 @@ export function createScene(container, { maxPixelRatio = 2 } = {}) {
       tube(polyline(pts.slice(0, 3)));
       evCable = tube(polyline(pts.slice(2)));
     } else tube(curve);
-    // One instanced mesh per flow; update() sets how many of its dots are shown
-    const dots = new THREE.InstancedMesh(dotGeo, new THREE.MeshBasicMaterial({ color: COLORS[key] }), PARTICLES);
+    // One instanced mesh per flow; update() sets how many of its dots are shown and colours each by its source
+    const dots = new THREE.InstancedMesh(dotGeo, new THREE.MeshBasicMaterial(), PARTICLES);
+    for (let i = 0; i < PARTICLES; i++) dots.setColorAt(i, DOT[key]);
     dots.frustumCulled = false; // bounds would be cached while the dots move
     scene.add(dots);
     flows[key] = { curve, dots, phase: 0, len: curve.getLength() };
@@ -235,6 +238,9 @@ export function createScene(container, { maxPixelRatio = 2 } = {}) {
     evCable.visible = s.evOn && s.evPlugged;
     chargerLed.material.color.set(s.ev > 0.05 ? (Math.sin(clock * 6) > 0 ? COLORS.ev : '#0d4a35') : '#444');
 
+    // Sources feed their own cable; the house, the car, a charging battery and export get a mix
+    const mix = sources(s);
+    const from = { solar: { solar: 1 }, grid: s.grid > 0 ? { grid: 1 } : mix.grid, batt: s.batt > 0 ? { batt: 1 } : mix.batt, home: mix.home, ev: mix.ev };
     for (const [key, f] of Object.entries(flows)) {
       const p = s[key], mag = Math.abs(p);
       const n = mag < 0.03 ? 0 : Math.min(PARTICLES, 3 + Math.ceil(mag * 2));
@@ -243,7 +249,11 @@ export function createScene(container, { maxPixelRatio = 2 } = {}) {
         dummy.position.copy(f.curve.getPointAt((i / n + f.phase) % 1));
         dummy.updateMatrix();
         f.dots.setMatrixAt(i, dummy.matrix);
+        const m = from[key], total = (m.solar ?? 0) + (m.batt ?? 0) + (m.grid ?? 0);
+        const u = ((i + 0.5) / n) * total;
+        f.dots.setColorAt(i, !total ? DOT[key] : u < (m.solar ?? 0) ? DOT.solar : u < (m.solar ?? 0) + (m.batt ?? 0) ? DOT.batt : DOT.grid);
       }
+      f.dots.instanceColor.needsUpdate = true;
       f.dots.count = n;
       f.dots.instanceMatrix.needsUpdate = true;
     }

@@ -134,3 +134,22 @@ export function simulate(cfg, spot) {
   }
   return out;
 }
+
+// Who supplies whom right now, in kW. Solar serves the house first, then the car, the battery and export.
+// The battery serves the house, then the car, then export. The grid covers what is left.
+// Returns, for each consumer (home, ev, battery charging, export), the kW it gets from solar, batt and grid.
+export function sources({ solar = 0, grid = 0, batt = 0, ev = 0, home = 0 }) {
+  const supply = { solar: Math.max(0, solar), batt: Math.max(0, batt), grid: Math.max(0, grid) };
+  const need = { home: Math.max(0, home), ev: Math.max(0, ev), batt: Math.max(0, -batt), grid: Math.max(0, -grid) };
+  const out = { home: {}, ev: {}, batt: {}, grid: {} };
+  for (const s of ['solar', 'batt', 'grid']) {
+    for (const d of ['home', 'ev', 'batt', 'grid']) {
+      if (s === d) continue; // the battery does not charge itself, the grid does not export to itself
+      const x = Math.min(supply[s], need[d]);
+      out[d][s] = x;
+      supply[s] -= x;
+      need[d] -= x;
+    }
+  }
+  return out;
+}

@@ -6,6 +6,7 @@ A Home Assistant dashboard card that draws your home as a small 3D scene. Power 
 
 What the card does:
 
+- Each dot takes the colour of where its power comes from: yellow for solar, purple for the home battery, orange for the grid. A car charging on solar gets yellow dots, and the car and house labels say it in numbers, like "70% solar, 30% grid".
 - Labels follow each device and show its power right now. Click a label to open that entity's details and history in Home Assistant.
 - The sun moves with the real time and month, the windows light up at night, and the panels glow with the solar output.
 - The scenery follows the season. Snow and a snowman in winter, blossom in spring, birds in summer, falling leaves in autumn and a pumpkin in October. A jogger and a dog run past by day.

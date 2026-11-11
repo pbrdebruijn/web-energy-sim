@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { simulate, buyPrice, SAMPLE, N } from './sim.js';
+import { simulate, buyPrice, SAMPLE, N, sources } from './sim.js';
 import { bucket, toValue, checkConfig, buildDay, pricesFromAttribute, guessEntities, toFormData, fromFormData } from './ha-data.js';
 
 const base = {
@@ -109,4 +109,9 @@ const L = { solar: tag(), home: tag(), grid: tag(), batt: tag(), ev: tag() };
 renderLabels(L, buildDay({ grid: fill(1) }), 0, { batt: false, ev: true, evName: '<img src=x onerror=alert(1)>' });
 assert.ok(!L.ev.innerHTML.includes('<img') && L.ev.innerHTML.includes('&#60;img'), 'ev_name is escaped');
 assert.throws(() => checkConfig({ entities: { grid: 'sensor.a' }, ev_name: { x: 1 } }), /ev_name/);
+// Solar serves the house first, then the car, the battery and export; the grid covers the rest
+const mix = sources({ solar: 3, grid: -0.5, batt: -1, ev: 1, home: 0.5 });
+assert.deepEqual([mix.home.solar, mix.ev.solar, mix.batt.solar, mix.grid.solar], [0.5, 1, 1, 0.5], 'solar split over all users');
+const night = sources({ solar: 0, grid: 4, batt: 1, ev: 4, home: 1 });
+assert.deepEqual([night.home.batt, night.ev.grid, night.home.grid], [1, 4, 0], 'battery covers the house, the grid the car');
 console.log('ok card data');

@@ -1,6 +1,6 @@
 // Labels, chart and their styles, shared by the website (main.js) and the Home Assistant card (card.js).
 import { COLORS } from './scene.js';
-import { DT } from './sim.js';
+import { DT, sources } from './sim.js';
 
 export const hhmm = (h) => `${String(Math.floor(h) % 24).padStart(2, '0')}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
 export const eur = (v, d = 2) => `${v < 0 ? '-' : ''}€${Math.abs(v).toFixed(d)}`;
@@ -20,6 +20,7 @@ export const UI_CSS = `
 .tag.off { opacity: .6; }
 .tag b { display: block; color: #f0efec; font-size: 14px; }
 .tag .soc { display: block; height: 4px; margin-top: 3px; border-radius: 2px; background: #383835; }
+.tag .mix { display: block; font-size: 11px; }
 .tag .soc i { display: block; height: 100%; border-radius: 2px; background: var(--c); }
 .clock { position: absolute; left: 16px; bottom: 16px; z-index: 1; display: flex; gap: 10px; align-items: center; color: #f0efec;
   background: rgba(26, 26, 25, .88); border: 1px solid rgba(255, 255, 255, .1); border-radius: 10px; padding: 8px 12px; }
@@ -43,16 +44,23 @@ export function renderLabels(L, r, i, { batt, ev, evName: rawName = 'EV', away =
   const bar = (v) => `<span class="soc"><i style="width:${v * 100}%"></i></span>`;
   const kw = (v) => `${Math.abs(v ?? 0).toFixed(1)} kW`;
   const price = (r.grid[i] < 0 ? r.sell[i] : null) ?? r.buy[i];
+  // "62% solar, 38% grid": where the power for the house, the car or a charging battery comes from
+  const m = sources({ solar: r.solar[i] ?? 0, grid: r.grid[i] ?? 0, batt: r.batt[i] ?? 0, ev: r.ev[i] ?? 0, home: r.home[i] ?? 0 });
+  const mixOf = (x) => {
+    const t = (x.solar ?? 0) + (x.batt ?? 0) + (x.grid ?? 0);
+    return t < 0.05 ? '' : `<span class="mix">${['solar', 'batt', 'grid'].filter((k) => (x[k] ?? 0) / t >= 0.05)
+      .map((k) => `${Math.round(((x[k] ?? 0) / t) * 100)}% ${{ solar: 'solar', batt: 'battery', grid: 'grid' }[k]}`).join(', ')}</span>`;
+  };
   L.solar.innerHTML = `Solar<b>${kw(r.solar[i])}</b>`;
-  L.home.innerHTML = `Home use<b>${kw(r.home[i])}</b>`;
+  L.home.innerHTML = `Home use<b>${kw(r.home[i])}</b>${mixOf(m.home)}`;
   L.grid.innerHTML = `Grid, ${r.grid[i] < -0.03 ? 'exporting' : r.grid[i] > 0.03 ? 'importing' : 'idle'}<b>${kw(r.grid[i])}</b>${price == null ? '' : `${eur(price, 3)} per kWh`}`;
   L.batt.classList.toggle('off', !batt);
   L.ev.classList.toggle('off', !ev);
   if (!batt) L.batt.innerHTML = 'Home battery<b>Off</b>';
-  else L.batt.innerHTML = `Battery, ${r.batt[i] > 0.03 ? 'discharging' : r.batt[i] < -0.03 ? 'charging' : 'idle'}<b>${kw(r.batt[i])}</b>${bar(r.battSoc[i] ?? 0)}${pct(r.battSoc[i] ?? 0)}`;
+  else L.batt.innerHTML = `Battery, ${r.batt[i] > 0.03 ? 'discharging' : r.batt[i] < -0.03 ? 'charging' : 'idle'}<b>${kw(r.batt[i])}</b>${r.batt[i] < -0.03 ? mixOf(m.batt) : ''}${bar(r.battSoc[i] ?? 0)}${pct(r.battSoc[i] ?? 0)}`;
   if (!ev) L.ev.innerHTML = `${evName}<b>Off</b>`;
   else if (away) L.ev.innerHTML = `${evName}, on the road<b>${r.evSoc[i] == null ? '' : pct(r.evSoc[i])}</b>${r.evSoc[i] == null ? '' : bar(r.evSoc[i])}`;
-  else L.ev.innerHTML = `${evName}, ${r.ev[i] > 0.03 ? 'charging' : 'plugged in'}<b>${kw(r.ev[i])}</b>${r.evSoc[i] == null ? '' : bar(r.evSoc[i]) + pct(r.evSoc[i])}`;
+  else L.ev.innerHTML = `${evName}, ${r.ev[i] > 0.03 ? 'charging' : 'plugged in'}<b>${kw(r.ev[i])}</b>${r.ev[i] > 0.03 ? mixOf(m.ev) : ''}${r.evSoc[i] == null ? '' : bar(r.evSoc[i]) + pct(r.evSoc[i])}`;
 }
 
 // Three small multiples on one time axis: price, power and charge level. Values may be null (no data yet), which leaves a gap.
