@@ -231,7 +231,7 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
 
   const NIGHT = new THREE.Color('#0b1026'), DAY = new THREE.Color('#8ecae6'), DUSK = new THREE.Color('#f79d5c'), GREY = new THREE.Color('#aab4bd');
   const tmp = V(0, 0, 0);
-  let clock = 0;
+  let clock = 0, lastFlowKey = '', from = {};
 
   // s: { t, month, rise, set, weather, kWp, solar, home, ev, batt, grid, battSoc, battOn, evOn, evAway (0 parked..1 gone), evPlugged, devices: [kW], still }
   function update(s, dt) {
@@ -265,9 +265,14 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
     evCable.visible = s.evOn && s.evPlugged;
     chargerLed.material.color.set(s.ev > 0.05 ? (Math.sin(clock * 6) > 0 ? COLORS.ev : '#0d4a35') : '#444');
 
-    // Sources feed their own cable; the house, the car, a charging battery and export get a mix
-    const mix = sources(s);
-    const from = { solar: { solar: 1 }, grid: s.grid > 0 ? { grid: 1 } : mix.grid, batt: s.batt > 0 ? { batt: 1 } : mix.batt, home: mix.home, ev: mix.ev };
+    // Sources feed their own cable; the house, the car, a charging battery and export get a mix.
+    // Readings change a few times a minute, so the split is only redone when they do.
+    const flowKey = `${s.solar}|${s.grid}|${s.batt}|${s.ev}|${s.home}`;
+    if (flowKey !== lastFlowKey) {
+      lastFlowKey = flowKey;
+      const mix = sources(s);
+      from = { solar: { solar: 1 }, grid: s.grid > 0 ? { grid: 1 } : mix.grid, batt: s.batt > 0 ? { batt: 1 } : mix.batt, home: mix.home, ev: mix.ev };
+    }
     for (const [key, f] of Object.entries(flows)) {
       const p = s[key], mag = Math.abs(p);
       const n = mag < 0.03 ? 0 : Math.min(PARTICLES, 3 + Math.ceil(mag * 2));
@@ -276,11 +281,17 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
         dummy.position.copy(f.curve.getPointAt((i / n + f.phase) % 1));
         dummy.updateMatrix();
         f.dots.setMatrixAt(i, dummy.matrix);
-        const m = from[key], total = (m.solar ?? 0) + (m.batt ?? 0) + (m.grid ?? 0);
-        const u = ((i + 0.5) / n) * total;
-        f.dots.setColorAt(i, !total ? DOT[key] : u < (m.solar ?? 0) ? DOT.solar : u < (m.solar ?? 0) + (m.batt ?? 0) ? DOT.batt : DOT.grid);
       }
-      f.dots.instanceColor.needsUpdate = true;
+      const colorKey = `${n}|${flowKey}`;
+      if (f.colorKey !== colorKey) { // dot colours only depend on the split and the number of dots
+        f.colorKey = colorKey;
+        const m = from[key], total = (m.solar ?? 0) + (m.batt ?? 0) + (m.grid ?? 0);
+        for (let i = 0; i < n; i++) {
+          const u = ((i + 0.5) / n) * total;
+          f.dots.setColorAt(i, !total ? DOT[key] : u < (m.solar ?? 0) ? DOT.solar : u < (m.solar ?? 0) + (m.batt ?? 0) ? DOT.batt : DOT.grid);
+        }
+        f.dots.instanceColor.needsUpdate = true;
+      }
       f.dots.count = n;
       f.dots.instanceMatrix.needsUpdate = true;
     }
