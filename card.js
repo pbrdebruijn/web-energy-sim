@@ -19,6 +19,9 @@ ha-card { overflow: hidden; }
 .stage canvas { display: block; }
 .clock { left: 12px; bottom: 12px; padding: 6px 10px; }
 .clock time { font-size: 20px; }
+.now-btn { cursor: pointer; font: inherit; font-size: 12px; color: #f0efec; background: #3987e5; border: 0; border-radius: 6px; padding: 4px 8px; }
+.now-btn:focus-visible { outline: 2px solid #f0efec; }
+.now-btn[hidden] { display: none; }
 .charts { position: relative; padding: 10px 14px 6px; }
 .devices { position: absolute; top: 10px; right: 10px; z-index: 1; display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
 .devices button { all: unset; cursor: pointer; display: flex; justify-content: space-between; gap: 12px; padding: 3px 9px; border-radius: 6px;
@@ -99,7 +102,7 @@ class EnergySceneCard extends HTMLElement {
     const e = this.entities, withChart = this.config.chart !== false;
     const root = this.shadowRoot ?? this.attachShadow({ mode: 'open' });
     root.innerHTML = `<style>${UI_CSS}${CARD_CSS}</style><ha-card>
-      <div class="stage" style="height:${this.height}px"><div class="clock"><time></time><small></small></div><div class="devices"></div><button class="totals-btn" hidden></button></div>
+      <div class="stage" style="height:${this.height}px"><div class="clock"><time></time><small></small><button class="now-btn" hidden></button></div><div class="devices"></div><button class="totals-btn" hidden></button></div>
       <div class="totals" hidden></div>
       <p class="warn" hidden></p>
       ${withChart ? `<section class="charts"><div class="legend"></div>
@@ -126,6 +129,7 @@ class EnergySceneCard extends HTMLElement {
     q('.devices').innerHTML = this.devices.map((d, k) => `<button data-k="${k}" title="${tr('Show details and history')}"></button>`).join('');
     q('.devices').querySelectorAll('button').forEach((b, k) => this.bind(b, 'device', this.devices[k].entity));
     this.show = { batt: !!(e.battery || e.battery_soc), ev: !!(e.ev || e.ev_soc), price: !!e.price };
+    q('.now-btn').onclick = () => { this.liveUntil = 0; }; // back to live right away instead of waiting for the hold to run out
     this.chart = withChart && createChart({ svg: q('.chart'), tip: q('.tip'), legend: q('.legend'), box: q('.charts') }, (h) => {
       this.viewT = h;
       this.liveUntil = Date.now() + SCRUB_HOLD; // dragging the chart replays earlier today, then it returns to now
@@ -315,6 +319,9 @@ class EnergySceneCard extends HTMLElement {
         const d = this.devices[k];
         b.innerHTML = `<span>${esc(this.devNames[d.entity] ?? d.entity)}</span><b>${fmt.num(Math.abs(this.devValues[k] ?? 0), 1)} kW</b>`;
       });
+      const nowBtn = this.q('.now-btn');
+      nowBtn.hidden = live;
+      nowBtn.textContent = tr('Back to now');
       this.q('.clock small').innerHTML = `${tr(live ? 'Now' : 'Earlier today')}${r.buy[i] == null ? '' : `<br>${fmt.money(r.buy[i], 3)} ${tr('per kWh')}`}`;
       this.renderTotals(); // follows a language change
     }
