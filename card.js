@@ -112,7 +112,7 @@ class EnergySceneCard extends HTMLElement {
     this.still = matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     this.frameMs = this.still ? 1000 : low ? 1000 / 20 - 2 : FRAME_MS;
     // Fill cost scales with pixel count, and 1.5 still looks sharp at card size
-    this.scene = createScene(q('.stage'), { maxPixelRatio: low ? 1 : 1.5, shadows: !low, devices: this.devices });
+    this.scene = createScene(q('.stage'), { maxPixelRatio: low ? 1 : 1.5, shadows: !low, devices: this.devices, house: this.config.house });
     for (const [key, el] of Object.entries(this.scene.labels)) {
       const actionKey = LABEL_ENTITY[key], entityId = e[actionKey];
       if (!entityId && !actionFor(this.config, actionKey, 'tap')) continue;
@@ -325,7 +325,7 @@ class EnergySceneCard extends HTMLElement {
     this.scene.update({
       t, month, rise, set, weather: this.weather, kWp: Number(this.config.solar_kwp ?? 5.5),
       solar: r.solar[i] ?? 0, home: r.home[i] ?? 0, ev: r.ev[i] ?? 0, batt: r.batt[i] ?? 0, grid: r.grid[i] ?? 0,
-      battSoc: r.battSoc[i] ?? 0, battOn: this.show.batt, evOn: this.show.ev, evAway: this.evAnim, evPlugged: !away, devices: this.devValues, house: this.config.house, effects: this.config.effects !== false, still: this.still,
+      battSoc: r.battSoc[i] ?? 0, battOn: this.show.batt, evOn: this.show.ev, evAway: this.evAnim, evPlugged: !away, devices: this.devValues, effects: this.config.effects !== false, still: this.still,
     }, dt);
     this.raf = requestAnimationFrame(this.frame);
   };
@@ -353,7 +353,7 @@ const FIELDS = [
   ['chart', 'Show the chart of today', null, { boolean: {} }],
   ['totals', "Show today's totals", 'From the Energy dashboard', { boolean: {} }],
   ['cheapest_hours', 'Cheapest hours to mark', 'In the price chart, from now to the end of the day. 0 turns it off', { number: { min: 0, max: 24, step: 1, mode: 'box' } }],
-  ['house', 'House type', 'Terraced shows grey neighbours on one side', { select: { mode: 'dropdown', options: [{ value: 'detached', label: 'Detached' }, { value: 'terraced', label: 'Terraced, in a row' }] } }],
+  ['house', 'House type', 'Terraced: a flat-roofed town house between grey neighbours, car parked on the street', { select: { mode: 'dropdown', options: [{ value: 'detached', label: 'Detached' }, { value: 'terraced', label: 'Terraced, in a row' }] } }],
   ['effects', 'Show seasonal effects', 'Falling leaves or snow, birds, the jogger and dog, snowman and pumpkin', { boolean: {} }],
   ['quality', 'Quality', 'Low drops shadows and sharpness, for older tablets', { select: { mode: 'dropdown', options: [{ value: 'high', label: 'High' }, { value: 'low', label: 'Low' }] } }],
   ['tap_action', 'Tap on a label', 'Default: show details and history', { ui_action: {} }],

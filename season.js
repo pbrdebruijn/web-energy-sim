@@ -12,10 +12,11 @@ const SEASON_OF = ['winter', 'winter', 'spring', 'spring', 'spring', 'summer', '
 const MAX_FALL = 320;
 const rand = (a, b) => a + Math.random() * (b - a);
 
-export function createSeasons({ scene, add, box, mat, grassMat, coneMat }) {
+export function createSeasons({ scene, add, box, mat, grassMat, coneMat, row = false }) {
   // Two leafy trees whose crowns change most with the seasons
   const bark = mat('#6b4a2f');
-  const crowns = [[-11.3, 3.4, 1], [10.8, -1.8, 1.15]].map(([x, z, s]) => {
+  // In a row they stand as street trees on the sidewalk
+  const crowns = (row ? [[-9.5, 3.5, 0.9], [9.2, 3.5, 0.9]] : [[-11.3, 3.4, 1], [10.8, -1.8, 1.15]]).map(([x, z, s]) => {
     add(new THREE.CylinderGeometry(0.18 * s, 0.24 * s, 2 * s, 8), bark, x, s, z).castShadow = true;
     for (const [ry, rz] of [[0, 0.7], [2.1, 0.6], [4.2, 0.8], [1, -0.1]]) { // bare branches, hidden by the crown when in leaf
       const b = add(new THREE.CylinderGeometry(0.04 * s, 0.08 * s, 1.5 * s, 6).translate(0, 0.75 * s, 0), bark, x, 1.8 * s, z);
@@ -94,7 +95,7 @@ export function createSeasons({ scene, add, box, mat, grassMat, coneMat }) {
   add(new THREE.ConeGeometry(0.06, 0.3, 8).rotateX(Math.PI / 2), mat('#e67e22'), 0, 1.8, 0.38, snowman);
   box(0.36, 0.3, 0.36, dark, 0, 2.15, 0, snowman);
   for (const x of [-0.1, 0.1]) box(0.05, 0.05, 0.02, dark, x, 1.88, 0.26, snowman);
-  snowman.position.set(-4.6, 0, 5);
+  snowman.position.set(...(row ? [-2.6, 0, 3] : [-4.6, 0, 5]));
   scene.add(snowman);
   casters(snowman);
   const pumpkin = add(new THREE.SphereGeometry(0.32, 14, 10).scale(1, 0.75, 1), mat('#e67e22', { emissive: '#ff8c00', emissiveIntensity: 0 }), -1.05, 0.24, 2.6);
@@ -147,7 +148,7 @@ export function createSeasons({ scene, add, box, mat, grassMat, coneMat }) {
     const bx = ((clock * 1.8) % 64) - 32;
     birds.forEach((b) => {
       b.visible = season.birds && day > 0.5;
-      b.position.set(bx + b.userData.dx, 6 + Math.sin(clock * 0.7) * 0.5, -6 + b.userData.dz);
+      b.position.set(bx + b.userData.dx, (row ? 10 : 6) + Math.sin(clock * 0.7) * 0.5, -6 + b.userData.dz);
       const a = Math.sin(clock * 9 + b.userData.flap) * 0.6;
       b.userData.wings[0].rotation.z = -a;
       b.userData.wings[1].rotation.z = a;

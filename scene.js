@@ -6,21 +6,48 @@ import { sources } from './sim.js';
 export const COLORS = { solar: '#c98500', home: '#3987e5', ev: '#199e70', batt: '#9085e9', grid: '#d95926' };
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
-const HUB = [3, 0.08, 1];
-// Each path runs in the direction of positive power.
-const PATHS = {
-  solar: [[-2, 4, 1.4], [2.5, 4, 1.4], [2.5, 0.08, 1.4], HUB],
-  grid: [[-9, 0.08, 7.2], [3, 0.08, 7.2], HUB],
-  batt: [[2.7, 0.3, -2.6], [3, 0.08, -2.6], HUB],
-  home: [HUB, [2.3, 0.08, 0.7], [2.3, 1.5, 0.7], [2.05, 1.5, 0.7]],
-  ev: [HUB, [4.6, 0.08, 1], [4.6, 0.9, 1], [5.35, 0.75, 1]],
+// Two layouts. Each path runs in the direction of positive power; the ev path ends with the plug cable.
+const HUB_D = [3, 0.08, 1], HUB_T = [0.4, 0.08, 3];
+const LAYOUTS = {
+  // Detached house with a pitched roof, battery at the side, car on the driveway
+  detached: {
+    hub: HUB_D,
+    paths: {
+      solar: [[-2, 4, 1.4], [2.5, 4, 1.4], [2.5, 0.08, 1.4], HUB_D],
+      grid: [[-9, 0.08, 7.2], [3, 0.08, 7.2], HUB_D],
+      batt: [[2.7, 0.3, -2.6], [3, 0.08, -2.6], HUB_D],
+      home: [HUB_D, [2.3, 0.08, 0.7], [2.3, 1.5, 0.7], [2.05, 1.5, 0.7]],
+      ev: [HUB_D, [4.6, 0.08, 1], [4.6, 0.9, 1], [5.35, 0.75, 1]],
+    },
+    labels: { solar: [-2, 6.3, -1], home: [-4.4, 1.2, 2.6], batt: [2.6, 3.1, -3.6], grid: [-9, 6.6, 7.2], ev: [6.6, 2.5, 1] },
+    camera: [16.5, 12.5, 20], target: [0, 1.6, 1.5],
+    batt: { at: [2.3, -2.6], turn: 0 },
+    charger: [4.6, 1],
+    devices: [[-0.75, 0, 2.55], [1.25, 0, 2.55], [-5.3, 0, 2.55], [-3.5, 0, 2.55]], // along the front wall, clear of the door and path
+  },
+  // Narrow town house with a flat roof in a row, like an old Haarlem street: battery against the front wall, car parked at the curb
+  terraced: {
+    hub: HUB_T,
+    paths: {
+      solar: [[-1.5, 6.62, -1], [-0.4, 6.62, -1], [-0.4, 6.62, 2.06], [-0.4, 0.08, 2.06], [-0.4, 0.08, 3], HUB_T],
+      grid: [[-5, 0.08, 3.6], [0.4, 0.08, 3.6], HUB_T],
+      batt: [[1.6, 0.3, 2.78], [1.6, 0.08, 2.88], [0.4, 0.08, 2.88], HUB_T],
+      home: [HUB_T, [0.4, 0.08, 2.1], [0.4, 1.3, 2.1], [0.4, 1.3, 1.97]],
+      ev: [HUB_T, [0.4, 0.08, 3.12], [2.8, 0.08, 3.12], [2.8, 0.08, 3.7], [2.8, 0.9, 3.7], [3.4, 0.75, 4.35]],
+    },
+    labels: { solar: [0, 7.6, -2], home: [-1.8, 4.6, 2.1], batt: [1.6, 3, 2.5], grid: [-5, 2.3, 3.6], ev: [5.4, 2.4, 5.3] },
+    camera: [5, 12, 27], target: [0, 2.6, 1], // from across the street, so the neighbours do not hide the front
+    batt: { at: [1.6, 2.5], turn: -Math.PI / 2 },
+    charger: [2.8, 3.7],
+    devices: [[-2.2, 6.4, -5.5], [-0.75, 6.4, -5.5], [0.75, 6.4, -5.5], [2.2, 6.4, -5.5]], // on the roof behind the panels
+  },
 };
-const LABEL_AT = { solar: [-2, 6.3, -1], home: [-4.4, 1.2, 2.6], batt: [2.6, 3.1, -3.6], grid: [-9, 6.6, 7.2], ev: [6.6, 2.5, 1] };
 const PARTICLES = 16;
-const DEVICE_X = [-0.75, 1.25, -5.3, -3.5]; // spots along the front wall, clear of the door and path
 const DOT = Object.fromEntries(Object.entries(COLORS).map(([k, c]) => [k, new THREE.Color(c)]));
 
-export function createScene(container, { maxPixelRatio = 2, devices = [], shadows = true } = {}) {
+export function createScene(container, { maxPixelRatio = 2, devices = [], shadows = true, house = 'detached' } = {}) {
+  const row = house === 'terraced', L = LAYOUTS[row ? 'terraced' : 'detached'];
+  const { hub: HUB, paths: PATHS, labels: LABEL_AT } = L;
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, maxPixelRatio));
   renderer.shadowMap.enabled = shadows;
@@ -30,9 +57,9 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
   const scene = new THREE.Scene();
   scene.background = new THREE.Color();
   const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 200);
-  camera.position.set(16.5, 12.5, 20);
+  camera.position.set(...L.camera);
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(0, 1.6, 1.5);
+  controls.target.set(...L.target);
   controls.maxPolarAngle = Math.PI / 2 - 0.08;
   controls.minDistance = 14;
   controls.maxDistance = 60;
@@ -67,51 +94,90 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
   // Small parts skip shadows: each caster adds a draw to the shadow pass, and they barely show up in it
   const receive = (m) => ((m.receiveShadow = true), m);
   const cast = (m) => ((m.castShadow = true), m);
-  receive(box(26, 0.5, 22, grassMat, 0, -0.25, 0));
-  receive(box(26, 0.06, 3, mat('#555b66'), 0, 0.03, 9.5));
-  const concrete = mat('#c9c4b8');
-  receive(box(2.8, 0.06, 10.4, concrete, 6.3, 0.03, 3));
-  receive(box(1.4, 0.06, 6, concrete, -2, 0.03, 5));
-
-  // House: x -6..2, z -4..2, front faces +z
-  cast(receive(box(8, 3.2, 6, mat('#f2e6d0'), -2, 1.6, -1)));
-  const tri = new THREE.Shape([new THREE.Vector2(-3.4, 0), new THREE.Vector2(3.4, 0), new THREE.Vector2(0, 2.2)]);
-  const roof = cast(receive(add(new THREE.ExtrudeGeometry(tri, { depth: 8.8, bevelEnabled: false }), mat('#b5533c'), -6.4, 3.2, -1)));
-  roof.rotation.y = Math.PI / 2;
-  box(1.1, 2.1, 0.1, mat('#7a4b2a'), -2, 1.05, 2.02);
+  const concrete = mat('#c9c4b8'), asphalt = mat('#555b66');
   const windowMat = mat('#9cc7e8', { emissive: '#ffd27a', emissiveIntensity: 0, roughness: 0.3 });
-  for (const x of [-4.6, 0.4]) box(1.5, 1.2, 0.1, windowMat, x, 1.9, 2.02);
-  box(0.1, 1.1, 1.2, windowMat, 2.02, 2.1, -0.7);
-  box(0.25, 0.5, 0.4, mat('#e8e8e8'), 2.12, 1.5, 0.7); // meter cupboard
-  box(0.5, 0.25, 0.5, mat('#3a3f47'), ...HUB);
-
-  // Solar panels on the south roof slope, 0.45 kWp each
-  const slope = Math.atan(2.2 / 3.4);
   const panelGroup = new THREE.Group();
-  panelGroup.position.set(-2, 3.2, 2.4);
-  panelGroup.rotation.x = -(Math.PI / 2 - slope);
   scene.add(panelGroup);
   const panelMat = mat('#1d3461', { emissive: '#4f8fff', emissiveIntensity: 0, roughness: 0.25, metalness: 0.4 });
   const panelCount = 27;
   const panels = new THREE.InstancedMesh(new THREE.BoxGeometry(0.88, 1.12, 0.06), panelMat, panelCount);
-  for (let i = 0; i < panelCount; i++) {
-    const row = Math.floor(i / 9), col = i % 9;
-    dummy.position.set((col - 4) * 0.95, 0.85 + row * 1.2, 0.06);
-    dummy.updateMatrix();
-    panels.setMatrixAt(i, dummy.matrix);
+  if (!row) {
+    receive(box(26, 0.5, 22, grassMat, 0, -0.25, 0));
+    receive(box(26, 0.06, 3, asphalt, 0, 0.03, 9.5));
+    receive(box(2.8, 0.06, 10.4, concrete, 6.3, 0.03, 3));
+    receive(box(1.4, 0.06, 6, concrete, -2, 0.03, 5));
+
+    // House: x -6..2, z -4..2, front faces +z
+    cast(receive(box(8, 3.2, 6, mat('#f2e6d0'), -2, 1.6, -1)));
+    const tri = new THREE.Shape([new THREE.Vector2(-3.4, 0), new THREE.Vector2(3.4, 0), new THREE.Vector2(0, 2.2)]);
+    const roof = cast(receive(add(new THREE.ExtrudeGeometry(tri, { depth: 8.8, bevelEnabled: false }), mat('#b5533c'), -6.4, 3.2, -1)));
+    roof.rotation.y = Math.PI / 2;
+    box(1.1, 2.1, 0.1, mat('#7a4b2a'), -2, 1.05, 2.02);
+    for (const x of [-4.6, 0.4]) box(1.5, 1.2, 0.1, windowMat, x, 1.9, 2.02);
+    box(0.1, 1.1, 1.2, windowMat, 2.02, 2.1, -0.7);
+    box(0.25, 0.5, 0.4, mat('#e8e8e8'), 2.12, 1.5, 0.7); // meter cupboard
+
+    // Solar panels on the south roof slope, 0.45 kWp each
+    panelGroup.position.set(-2, 3.2, 2.4);
+    panelGroup.rotation.x = -(Math.PI / 2 - Math.atan(2.2 / 3.4));
+    for (let i = 0; i < panelCount; i++) {
+      dummy.position.set((i % 9 - 4) * 0.95, 0.85 + Math.floor(i / 9) * 1.2, 0.06);
+      dummy.updateMatrix();
+      panels.setMatrixAt(i, dummy.matrix);
+    }
+  } else {
+    // Sidewalk and a narrow street in front, back gardens behind
+    receive(box(34, 0.5, 22, grassMat, 0, -0.25, 0));
+    receive(box(34, 0.08, 2, concrete, 0, 0.04, 3));
+    receive(box(34, 0.06, 6, asphalt, 0, 0.03, 7));
+    box(34, 0.1, 0.12, mat('#9a968c'), 0, 0.05, 4.02); // curb
+
+    // The user's house: brick, x -3..3, z -6..2, flat roof with a dark edge
+    cast(receive(box(6, 6.4, 8, mat('#b8674a'), 0, 3.2, -2)));
+    receive(box(6.2, 0.25, 8.2, mat('#4a4d52'), 0, 6.5, -2));
+    box(1.1, 2.1, 0.1, mat('#2f4a3a'), -1.6, 1.05, 2.02);
+    box(1.5, 1.2, 0.1, windowMat, 1.1, 2.2, 2.02);
+    for (const y of [3.9, 5.4]) for (const x of [-1.4, 1.4]) box(1.4, 1.1, 0.1, windowMat, x, y, 2.02);
+    box(0.3, 0.45, 0.12, mat('#e8e8e8'), 0.4, 1.3, 2.05); // meter box
+
+    // Grey neighbours on both sides, flat roofs at different heights
+    const greyWall = mat('#c4c6c9'), greyEdge = mat('#8d9094'), greyGlass = mat('#9aa3ad', { roughness: 0.4 });
+    for (const [cx, h] of [[-6, 5.6], [-12, 7], [6, 6.9], [12, 5.8]]) {
+      cast(receive(box(6, h, 8, greyWall, cx, h / 2, -2)));
+      box(6, 0.2, 8.1, greyEdge, cx, h + 0.05, -2);
+      box(1.1, 2.1, 0.1, greyEdge, cx - 1.6, 1.05, 2.02);
+      for (let y = 2.2; y < h - 0.8; y += 1.6) for (const x of [-1.4, 1.4]) if (y > 3 || x > 0) box(1.4, 1.1, 0.1, greyGlass, cx + x, y, 2.02);
+    }
+    box(0.8, 1, 0.5, mat('#8b9199'), -5, 0.5, 3.6); // street cabinet for the grid connection
+
+    // Panels in tilted rows on the flat roof, facing the street
+    panelGroup.position.set(0, 6.75, 0);
+    for (let i = 0; i < panelCount; i++) {
+      dummy.position.set((i % 5 - 2) * 0.95, 0.25, -4.6 + Math.floor(i / 5) * 1.25);
+      dummy.rotation.set(-Math.PI / 2 + 0.35, 0, 0);
+      dummy.updateMatrix();
+      panels.setMatrixAt(i, dummy.matrix);
+    }
+    dummy.rotation.set(0, 0, 0);
   }
+  box(0.5, 0.25, 0.5, mat('#3a3f47'), ...HUB);
   Object.assign(panels, { frustumCulled: false }); // bounds would be cached at count 0
   panelGroup.add(panels);
 
   // Home battery with five charge LEDs
   const white = mat('#e9edf2');
-  cast(box(0.5, 1.6, 1.1, white, 2.3, 0.8, -2.6));
+  const battery = new THREE.Group();
+  battery.position.set(L.batt.at[0], 0, L.batt.at[1]);
+  battery.rotation.y = L.batt.turn; // the LEDs face +x locally
+  scene.add(battery);
+  cast(box(0.5, 1.6, 1.1, white, 0, 0.8, 0, battery));
   const leds = [0, 1, 2, 3, 4].map((i) =>
-    box(0.04, 0.18, 0.7, new THREE.MeshBasicMaterial({ color: '#333' }), 2.57, 0.35 + i * 0.26, -2.6));
+    box(0.04, 0.18, 0.7, new THREE.MeshBasicMaterial({ color: '#333' }), 0.27, 0.35 + i * 0.26, 0, battery));
 
   // Charger post and car
-  box(0.25, 1.2, 0.25, white, 4.6, 0.6, 1);
-  const chargerLed = box(0.27, 0.08, 0.27, new THREE.MeshBasicMaterial({ color: '#444' }), 4.6, 1.1, 1);
+  const [chx, chz] = L.charger;
+  box(0.25, 1.2, 0.25, white, chx, 0.6, chz);
+  const chargerLed = box(0.27, 0.08, 0.27, new THREE.MeshBasicMaterial({ color: '#444' }), chx, 1.1, chz);
   const car = new THREE.Group();
   scene.add(car);
   cast(box(1.9, 0.65, 4.4, mat('#f4f5f7', { roughness: 0.3, metalness: 0.3 }), 0, 0.7, 0, car));
@@ -123,38 +189,19 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
   for (const x of [-0.7, 0.7]) box(0.35, 0.12, 0.05, tailMat, x, 0.85, -2.2, car);
 
   // Grid pole
-  const wood = mat('#6b5846');
-  cast(box(0.3, 6, 0.3, wood, -9, 3, 7.2));
-  cast(box(2.4, 0.2, 0.2, wood, -9, 5.4, 7.2));
-  box(0.9, 1, 0.7, mat('#8b9199'), -9, 0.5, 6.5);
+  if (!row) {
+    const wood = mat('#6b5846');
+    cast(box(0.3, 6, 0.3, wood, -9, 3, 7.2));
+    cast(box(2.4, 0.2, 0.2, wood, -9, 5.4, 7.2));
+    box(0.9, 1, 0.7, mat('#8b9199'), -9, 0.5, 6.5);
+  }
 
   // Trees
   const coneMat = mat('#3f8f4f');
   const bark = mat('#6b4a2f');
-  const sideTree = new THREE.Group(); // stands where a terraced neighbour goes
-  scene.add(sideTree);
-  for (const [x, z, s] of [[-10, -6, 1.2], [-8.5, -1, 0.9], [9.5, -7, 1.3], [10.5, 4, 1]]) {
-    const parent = x === -8.5 ? sideTree : scene;
-    cast(add(new THREE.CylinderGeometry(0.2 * s, 0.26 * s, 1.4 * s, 8), bark, x, 0.7 * s, z, parent));
-    cast(add(new THREE.ConeGeometry(1.3 * s, 2.8 * s, 8), coneMat, x, 2.6 * s, z, parent));
-  }
-
-  // Terraced house: grey neighbours share the left wall, so the row runs out of view and the user's house stands out
-  const row = new THREE.Group();
-  row.visible = false;
-  scene.add(row);
-  receive(box(18, 0.5, 22, grassMat, -22, -0.25, 0, row));
-  receive(box(18, 0.06, 3, mat('#555b66'), -22, 0.03, 9.5, row));
-  const greyWall = mat('#c4c6c9'), greyRoof = mat('#8d9094'), greyGlass = mat('#9aa3ad', { roughness: 0.4 });
-  const nTri = new THREE.Shape([new THREE.Vector2(-3.35, 0), new THREE.Vector2(3.35, 0), new THREE.Vector2(0, 2.17)]); // a hair lower, so the main roof covers the joint
-  const nRoofGeo = new THREE.ExtrudeGeometry(nTri, { depth: 8, bevelEnabled: false });
-  for (const cx of [-10, -18, -26]) {
-    cast(receive(box(8, 3.2, 6, greyWall, cx, 1.6, -1, row)));
-    const r = cast(receive(add(nRoofGeo, greyRoof, cx - 4, 3.2, -1, row)));
-    r.rotation.y = Math.PI / 2;
-    box(1.1, 2.1, 0.1, greyRoof, cx, 1.05, 2.02, row);
-    for (const x of [cx - 2.6, cx + 2.4]) box(1.5, 1.2, 0.1, greyGlass, x, 1.9, 2.02, row);
-    receive(box(1.4, 0.06, 6, concrete, cx, 0.03, 5, row));
+  for (const [x, z, s] of row ? [[-10, -9, 1.2], [9, -9.5, 1.3]] : [[-10, -6, 1.2], [-8.5, -1, 0.9], [9.5, -7, 1.3], [10.5, 4, 1]]) {
+    cast(add(new THREE.CylinderGeometry(0.2 * s, 0.26 * s, 1.4 * s, 8), bark, x, 0.7 * s, z));
+    cast(add(new THREE.ConeGeometry(1.3 * s, 2.8 * s, 8), coneMat, x, 2.6 * s, z));
   }
 
   // Sun, moon, clouds
@@ -190,8 +237,8 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
   for (const [key, pts] of Object.entries(PATHS)) {
     const curve = polyline(pts);
     if (key === 'ev') {
-      tube(polyline(pts.slice(0, 3)));
-      evCable = tube(polyline(pts.slice(2)));
+      tube(polyline(pts.slice(0, -1)));
+      evCable = tube(polyline(pts.slice(-2))); // the plug cable, hidden while unplugged
     } else tube(curve);
     // One instanced mesh per flow; update() sets how many of its dots are shown and colours each by its source
     const dots = new THREE.InstancedMesh(dotGeo, new THREE.MeshBasicMaterial(), PARTICLES);
@@ -203,9 +250,9 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
 
   // Extra devices (heat pump, AC, boiler, washing machine) stand along the front of the house, clear of the door and path.
   // They show their power by spinning faster and glowing; the card lists their numbers in a corner.
-  const devs = devices.slice(0, DEVICE_X.length).map(({ type }, k) => {
-    const g = new THREE.Group(), x = DEVICE_X[k];
-    g.position.set(x, 0, 2.55);
+  const devs = devices.slice(0, L.devices.length).map(({ type }, k) => {
+    const g = new THREE.Group();
+    g.position.set(...L.devices[k]);
     scene.add(g);
     const body = mat(type === 'heat_pump' ? '#c9ccd1' : '#eef0f2');
     const glow = new THREE.MeshBasicMaterial({ color: '#333' });
@@ -248,13 +295,13 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
   observer.observe(container);
   resize();
 
-  const seasons = createSeasons({ scene, add, box, mat, grassMat, coneMat });
+  const seasons = createSeasons({ scene, add, box, mat, grassMat, coneMat, row });
 
   const NIGHT = new THREE.Color('#0b1026'), DAY = new THREE.Color('#8ecae6'), DUSK = new THREE.Color('#f79d5c'), GREY = new THREE.Color('#aab4bd');
   const tmp = V(0, 0, 0);
   let clock = 0, lastFlowKey = '', from = {};
 
-  // s: { t, month, rise, set, weather, kWp, solar, home, ev, batt, grid, battSoc, battOn, evOn, evAway (0 parked..1 gone), evPlugged, devices: [kW], house: 'detached' | 'terraced', effects (false hides falling leaves, birds, jogger), still }
+  // s: { t, month, rise, set, weather, kWp, solar, home, ev, batt, grid, battSoc, battOn, evOn, evAway (0 parked..1 gone), evPlugged, devices: [kW], effects (false hides falling leaves, birds, jogger), still }
   function update(s, dt) {
     if (s.still) dt = 0; // reduced motion: everything keeps its place, only the time of day and the numbers change
     clock += dt;
@@ -282,7 +329,8 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
 
     const ease = s.evAway * s.evAway * (3 - 2 * s.evAway);
     car.visible = s.evOn && s.evAway < 1;
-    car.position.set(6.3, 0, 1 + ease * 12);
+    if (row) { car.position.set(5.4 + ease * 14, 0, 5.3); car.rotation.y = Math.PI / 2; } // parked along the curb past the charger, so the battery stays in view; drives off down the street
+    else car.position.set(6.3, 0, 1 + ease * 12);
     evCable.visible = s.evOn && s.evPlugged;
     chargerLed.material.color.set(s.ev > 0.05 ? (Math.sin(clock * 6) > 0 ? COLORS.ev : '#0d4a35') : '#444');
 
@@ -317,9 +365,6 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
       f.dots.instanceMatrix.needsUpdate = true;
     }
 
-    row.visible = s.house === 'terraced';
-    sideTree.visible = !row.visible;
-
     devs.forEach((d, k) => {
       const p = Math.max(0, s.devices?.[k] ?? 0);
       if (d.spinner) d.spinner.rotation.z -= dt * Math.min(12, p * 6);
@@ -334,7 +379,7 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
     const { clientWidth: w, clientHeight: h } = container;
     for (const [key, el] of Object.entries(labels)) {
       tmp.set(...LABEL_AT[key]);
-      if (key === 'ev' && car.visible) tmp.z = Math.min(car.position.z, 8);
+      if (key === 'ev' && car.visible) { if (row) tmp.x = Math.min(car.position.x, 9); else tmp.z = Math.min(car.position.z, 8); }
       tmp.project(camera);
       const tr = `translate(-50%,-100%) translate(${(((tmp.x + 1) / 2) * w).toFixed(1)}px,${(((1 - tmp.y) / 2) * h).toFixed(1)}px)`;
       if (el.dataset.tr !== tr) el.style.transform = el.dataset.tr = tr; // unchanged writes still cost a restyle; style.transform reads back reformatted

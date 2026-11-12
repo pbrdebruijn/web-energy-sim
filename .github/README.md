@@ -13,7 +13,7 @@ Try it at [pbrdebruijn.github.io/web-energy-sim](https://pbrdebruijn.github.io/w
 - Dynamic prices are the day-ahead price plus 21% VAT, the supplier's purchase fee and €0.1108 energy tax per kWh. The purchase fee can be changed under **More settings**. Saldering, net metering that ends on 1 January 2027, can be switched on or off.
 - The home battery either trades on price or stores solar surplus only. The car charges in the cheapest hours of its slot, as soon as it plugs in, or from solar surplus only.
 - The result is the price per kWh that actually reaches the car battery, after charger, car and battery losses.
-- Pick a detached house or a terraced house in a row, with grey neighbours so your own house stands out.
+- Pick a detached house, or a narrow town house with a flat roof between grey neighbours, so your own house stands out.
 - Click a label in the scene to change that device's settings. The sidebar has every setting, with the detailed ones under **More settings**.
 - **Share** gives a link that opens the simulator with the same settings. The link holds only what differs from the defaults, like `#month=7&batt.kwh=17`.
 - The scenery follows the month: snow, blossom, birds, falling leaves, a snowman and a pumpkin.

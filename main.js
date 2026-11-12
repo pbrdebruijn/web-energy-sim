@@ -129,6 +129,7 @@ const onInput = (e) => {
   else set(p, el.value / c.k);
   sync(p);
   if (p === 'provider') { cfg.fee = PROVIDERS[cfg.provider].fee; sync('fee'); }
+  if (p === 'house') buildScene();
   if (p === 'priceSrc' || p === 'provider') loadPrices(); else recompute();
 };
 $('controls').addEventListener('input', onInput);
@@ -276,15 +277,23 @@ $('closeSettings').onclick = () => togglePanel('settings', false);
 // ---- Playback and scene ----
 const now = new Date();
 let t = now.getHours() + now.getMinutes() / 60, playing = true, speed = 1, last = performance.now(), labelKey = '';
-const scene = createScene($('stage'));
-for (const [key, el] of Object.entries(scene.labels)) {
-  el.tabIndex = 0;
-  el.setAttribute('role', 'button');
-  el.setAttribute('aria-haspopup', 'dialog');
-  el.title = 'Adjust settings';
-  el.onclick = () => openPop(key);
-  el.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPop(key); } };
+let scene;
+// The house type changes the whole layout, so the scene is built again for it
+function buildScene() {
+  if (popKey) closePop();
+  scene?.dispose();
+  scene = createScene($('stage'), { house: cfg.house });
+  labelKey = '';
+  for (const [key, el] of Object.entries(scene.labels)) {
+    el.tabIndex = 0;
+    el.setAttribute('role', 'button');
+    el.setAttribute('aria-haspopup', 'dialog');
+    el.title = 'Adjust settings';
+    el.onclick = () => openPop(key);
+    el.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPop(key); } };
+  }
 }
+buildScene();
 
 $('play').onclick = () => {
   playing = !playing;
@@ -312,7 +321,7 @@ function frame(ts) {
   scene.update({
     t, month: cfg.month, rise, set: sunset, weather: cfg.weather, kWp: cfg.kWp,
     solar: r.solar[i], home: r.home[i], ev: r.ev[i], batt: r.batt[i], grid: r.grid[i],
-    battSoc: r.battSoc[i], battOn: cfg.batt.on, evOn: cfg.ev.on, evAway, evPlugged: !away, house: cfg.house,
+    battSoc: r.battSoc[i], battOn: cfg.batt.on, evOn: cfg.ev.on, evAway, evPlugged: !away,
   }, dt);
   requestAnimationFrame(frame);
 }
