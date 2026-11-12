@@ -254,7 +254,7 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
   const tmp = V(0, 0, 0);
   let clock = 0, lastFlowKey = '', from = {};
 
-  // s: { t, month, rise, set, weather, kWp, solar, home, ev, batt, grid, battSoc, battOn, evOn, evAway (0 parked..1 gone), evPlugged, devices: [kW], house: 'detached' | 'terraced', still }
+  // s: { t, month, rise, set, weather, kWp, solar, home, ev, batt, grid, battSoc, battOn, evOn, evAway (0 parked..1 gone), evPlugged, devices: [kW], house: 'detached' | 'terraced', effects (false hides falling leaves, birds, jogger), still }
   function update(s, dt) {
     if (s.still) dt = 0; // reduced motion: everything keeps its place, only the time of day and the numbers change
     clock += dt;
@@ -326,7 +326,7 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
       d.glow.color.set(p > 0.02 ? COLORS.home : '#333');
     });
 
-    seasons(s.month, day, dt, clock);
+    seasons(s.month, day, dt, clock, s.effects !== false);
 
     controls.update();
     renderer.render(scene, camera);

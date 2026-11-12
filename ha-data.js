@@ -157,7 +157,7 @@ export function guessEntities(states) {
 }
 
 // The editor form is flat; the card config keeps sensors under entities.
-const OPTION_KEYS = ['invert', 'ev_name', 'solar_kwp', 'height', 'chart', 'totals', 'cheapest_hours', 'house', 'quality', 'tap_action', 'hold_action'];
+const OPTION_KEYS = ['invert', 'ev_name', 'solar_kwp', 'height', 'chart', 'totals', 'cheapest_hours', 'house', 'effects', 'quality', 'tap_action', 'hold_action'];
 // Devices sit in the form as device_1, device_1_type and device_1_name, up to 4
 const DEVICE_SLOTS = [1, 2, 3, 4];
 export const toFormData = (config) => ({

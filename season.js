@@ -115,13 +115,19 @@ export function createSeasons({ scene, add, box, mat, grassMat, coneMat }) {
     fall.instanceColor.needsUpdate = true;
     shirtMat.color.set(season.shirt);
     hat.visible = SEASON_OF[m] === 'winter';
-    snowman.visible = SEASON_OF[m] === 'winter';
-    pumpkin.visible = m === 9;
   };
 
-  // m: month 0..11, day: 0 night..1 full daylight
-  return function update(m, day, dt, clock) {
+  // m: month 0..11, day: 0 night..1 full daylight. effects false hides the moving extras and decorations; tree colours stay.
+  return function update(m, day, dt, clock, effects = true) {
     if (m !== month) setMonth(m);
+    snowman.visible = effects && SEASON_OF[m] === 'winter';
+    pumpkin.visible = effects && m === 9;
+    if (!effects) {
+      fall.count = 0;
+      birds.forEach((b) => (b.visible = false));
+      runner.visible = dog.visible = false;
+      return;
+    }
 
     const f = season.fall;
     fall.count = f ? f.n : 0;
