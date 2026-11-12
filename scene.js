@@ -381,7 +381,9 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
       tmp.set(...LABEL_AT[key]);
       if (key === 'ev' && car.visible) { if (row) tmp.x = Math.min(car.position.x, 9); else tmp.z = Math.min(car.position.z, 8); }
       tmp.project(camera);
-      const tr = `translate(-50%,-100%) translate(${(((tmp.x + 1) / 2) * w).toFixed(1)}px,${(((1 - tmp.y) / 2) * h).toFixed(1)}px)`;
+      if (el._t !== el.textContent) { el._t = el.textContent; el._w = el.offsetWidth; } // measure only when the text changes
+      const x = THREE.MathUtils.clamp(((tmp.x + 1) / 2) * w, el._w / 2 + 4, w - el._w / 2 - 4); // keep labels inside narrow cards
+      const tr = `translate(-50%,-100%) translate(${x.toFixed(1)}px,${(((1 - tmp.y) / 2) * h).toFixed(1)}px)`;
       if (el.dataset.tr !== tr) el.style.transform = el.dataset.tr = tr; // unchanged writes still cost a restyle; style.transform reads back reformatted
     }
   }
