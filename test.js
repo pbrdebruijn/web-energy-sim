@@ -133,6 +133,8 @@ assert.deepEqual(fromFormData(toFormData(withDevices), withDevices), withDevices
 assert.deepEqual(fromFormData({ device_2: 'sensor.ac_power' }, {}).devices, [{ entity: 'sensor.ac_power', type: 'other' }], 'empty slots are skipped');
 assert.equal(fromFormData({}, withDevices).devices, undefined, 'clearing every slot removes devices');
 checkConfig({ devices: [{ entity: 'sensor.hp_power', type: 'heat_pump', name: 'Warmtepomp' }] });
+checkConfig({ house: 'terraced' });
+assert.throws(() => checkConfig({ house: 'villa' }), /detached or terraced/);
 assert.throws(() => checkConfig({ devices: [{ entity: 'sensor.x', type: 'rocket' }] }), /not one of/);
 assert.throws(() => checkConfig({ devices: [{ type: 'ac' }] }), /entity/);
 

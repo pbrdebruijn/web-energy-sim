@@ -8,7 +8,7 @@ const $ = (id) => document.getElementById(id);
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 const cfg = {
-  yearlyKwh: 3500, month: new Date().getMonth(), kWp: 5.5, weather: 1, saldering: true, priceSrc: 'live', provider: 'zonneplan', fee: 0.02, fixedPrice: 0.27,
+  house: 'detached', yearlyKwh: 3500, month: new Date().getMonth(), kWp: 5.5, weather: 1, saldering: true, priceSrc: 'live', provider: 'zonneplan', fee: 0.02, fixedPrice: 0.27,
   batt: { on: true, kwh: 10, kw: 5, rte: 0.85, mode: 'smart', feedEv: true },
   // Tesla Model Y Long Range: about 75 kWh usable, 16.5 kWh per 100 km in mixed driving
   ev: { on: true, kwh: 75, cons: 16.5, km: 50, from: 18, until: 7.5, chargerKw: 11, eff: 0.9, target: 80, mode: 'cheap' },
@@ -29,7 +29,7 @@ const S = (p, label, opts) => ({ p, label, opts });
 const C = (p, label) => ({ p, label, check: true });
 const A = (c) => ({ ...c, adv: true }); // advanced: starts hidden under "More settings"
 const SECTIONS = [
-  ['Home', 'home', null, [R('yearlyKwh', 'Yearly usage', 1000, 10000, 100, 'kWh')]],
+  ['Home', 'home', null, [S('house', 'House type', [['detached', 'Detached'], ['terraced', 'Terraced, in a row']]), R('yearlyKwh', 'Yearly usage', 1000, 10000, 100, 'kWh')]],
   ['Solar panels', 'solar', null, [
     R('kWp', 'Installed power', 0, 12, 0.5, 'kWp'),
     S('month', 'Month', MONTHS.map((m, i) => [i, m])),
@@ -312,7 +312,7 @@ function frame(ts) {
   scene.update({
     t, month: cfg.month, rise, set: sunset, weather: cfg.weather, kWp: cfg.kWp,
     solar: r.solar[i], home: r.home[i], ev: r.ev[i], batt: r.batt[i], grid: r.grid[i],
-    battSoc: r.battSoc[i], battOn: cfg.batt.on, evOn: cfg.ev.on, evAway, evPlugged: !away,
+    battSoc: r.battSoc[i], battOn: cfg.batt.on, evOn: cfg.ev.on, evAway, evPlugged: !away, house: cfg.house,
   }, dt);
   requestAnimationFrame(frame);
 }

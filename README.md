@@ -85,6 +85,7 @@ Every sensor is optional. Sensors you leave out come from the Energy dashboard w
 | `actions` | none | Actions per label: `solar`, `home`, `grid`, `battery` or `ev`, each with its own `tap_action` and `hold_action`. For example a hold on the car that toggles the charger. |
 | `totals` | `true` | Set to `false` to remove today's totals. They only show when the Energy dashboard has energy meters. With totals on, a **Totals** button at the bottom right of the scene shows or hides them, and your browser remembers the choice. |
 | `solar_kwp` | `5.5` | Your solar peak power in kWp. The scene shows one panel per 0.45 kWp, and the panels glow by output against this number. |
+| `house` | `detached` | `terraced` puts your house in a row with grey neighbours on the left, like a Dutch rijtjeshuis. Also in the card editor. |
 | `ev_name` | `EV` | Name on the car's label. |
 | `devices` | none | Extra devices to show, see below. |
 

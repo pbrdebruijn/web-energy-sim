@@ -31,6 +31,7 @@ export function checkConfig(config) {
     throw new Error('cheapest_hours must be a whole number from 0 to 24.');
   }
   if (config.quality !== undefined && !['high', 'low'].includes(config.quality)) throw new Error('quality must be high or low.');
+  if (config.house !== undefined && !['detached', 'terraced'].includes(config.house)) throw new Error('house must be detached or terraced.');
   const isAction = (a) => a === undefined || (a && typeof a === 'object' && typeof a.action === 'string');
   if (!isAction(config.tap_action) || !isAction(config.hold_action)) throw new Error('tap_action and hold_action need an "action:", like more-info or navigate.');
   for (const [k, v] of Object.entries(config.actions ?? {})) {
@@ -156,7 +157,7 @@ export function guessEntities(states) {
 }
 
 // The editor form is flat; the card config keeps sensors under entities.
-const OPTION_KEYS = ['invert', 'ev_name', 'solar_kwp', 'height', 'chart', 'totals', 'cheapest_hours', 'quality', 'tap_action', 'hold_action'];
+const OPTION_KEYS = ['invert', 'ev_name', 'solar_kwp', 'height', 'chart', 'totals', 'cheapest_hours', 'house', 'quality', 'tap_action', 'hold_action'];
 // Devices sit in the form as device_1, device_1_type and device_1_name, up to 4
 const DEVICE_SLOTS = [1, 2, 3, 4];
 export const toFormData = (config) => ({

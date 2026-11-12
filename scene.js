@@ -131,9 +131,30 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
   // Trees
   const coneMat = mat('#3f8f4f');
   const bark = mat('#6b4a2f');
+  const sideTree = new THREE.Group(); // stands where a terraced neighbour goes
+  scene.add(sideTree);
   for (const [x, z, s] of [[-10, -6, 1.2], [-8.5, -1, 0.9], [9.5, -7, 1.3], [10.5, 4, 1]]) {
-    cast(add(new THREE.CylinderGeometry(0.2 * s, 0.26 * s, 1.4 * s, 8), bark, x, 0.7 * s, z));
-    cast(add(new THREE.ConeGeometry(1.3 * s, 2.8 * s, 8), coneMat, x, 2.6 * s, z));
+    const parent = x === -8.5 ? sideTree : scene;
+    cast(add(new THREE.CylinderGeometry(0.2 * s, 0.26 * s, 1.4 * s, 8), bark, x, 0.7 * s, z, parent));
+    cast(add(new THREE.ConeGeometry(1.3 * s, 2.8 * s, 8), coneMat, x, 2.6 * s, z, parent));
+  }
+
+  // Terraced house: grey neighbours share the left wall, so the row runs out of view and the user's house stands out
+  const row = new THREE.Group();
+  row.visible = false;
+  scene.add(row);
+  receive(box(18, 0.5, 22, grassMat, -22, -0.25, 0, row));
+  receive(box(18, 0.06, 3, mat('#555b66'), -22, 0.03, 9.5, row));
+  const greyWall = mat('#c4c6c9'), greyRoof = mat('#8d9094'), greyGlass = mat('#9aa3ad', { roughness: 0.4 });
+  const nTri = new THREE.Shape([new THREE.Vector2(-3.35, 0), new THREE.Vector2(3.35, 0), new THREE.Vector2(0, 2.17)]); // a hair lower, so the main roof covers the joint
+  const nRoofGeo = new THREE.ExtrudeGeometry(nTri, { depth: 8, bevelEnabled: false });
+  for (const cx of [-10, -18, -26]) {
+    cast(receive(box(8, 3.2, 6, greyWall, cx, 1.6, -1, row)));
+    const r = cast(receive(add(nRoofGeo, greyRoof, cx - 4, 3.2, -1, row)));
+    r.rotation.y = Math.PI / 2;
+    box(1.1, 2.1, 0.1, greyRoof, cx, 1.05, 2.02, row);
+    for (const x of [cx - 2.6, cx + 2.4]) box(1.5, 1.2, 0.1, greyGlass, x, 1.9, 2.02, row);
+    receive(box(1.4, 0.06, 6, concrete, cx, 0.03, 5, row));
   }
 
   // Sun, moon, clouds
@@ -233,7 +254,7 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
   const tmp = V(0, 0, 0);
   let clock = 0, lastFlowKey = '', from = {};
 
-  // s: { t, month, rise, set, weather, kWp, solar, home, ev, batt, grid, battSoc, battOn, evOn, evAway (0 parked..1 gone), evPlugged, devices: [kW], still }
+  // s: { t, month, rise, set, weather, kWp, solar, home, ev, batt, grid, battSoc, battOn, evOn, evAway (0 parked..1 gone), evPlugged, devices: [kW], house: 'detached' | 'terraced', still }
   function update(s, dt) {
     if (s.still) dt = 0; // reduced motion: everything keeps its place, only the time of day and the numbers change
     clock += dt;
@@ -295,6 +316,9 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
       f.dots.count = n;
       f.dots.instanceMatrix.needsUpdate = true;
     }
+
+    row.visible = s.house === 'terraced';
+    sideTree.visible = !row.visible;
 
     devs.forEach((d, k) => {
       const p = Math.max(0, s.devices?.[k] ?? 0);
