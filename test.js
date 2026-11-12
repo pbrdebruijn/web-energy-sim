@@ -36,6 +36,13 @@ const direct = simulate({ ...base, kWp: 0, batt: { ...base.batt, on: false } }, 
 const cheap = simulate({ ...base, kWp: 0, batt: { ...base.batt, on: false }, ev: { ...base.ev, mode: 'cheap' } }, SAMPLE.winter);
 assert.ok(cheap.totals.netPrice < direct.totals.netPrice, 'cheap hours beat plug-in charging');
 
+// Fixed price: every slot costs the same, and the home battery does not buy from the grid to trade.
+const fixed = simulate({ ...base, tariff: { fixed: 0.3 } }, SAMPLE.winter);
+assert.ok(fixed.buy.every((p) => p === 0.3), 'fixed buy price');
+assert.ok(fixed.flows.every((f) => f.gB === 0), 'no grid charging at a flat price');
+assert.ok(fixed.totals.battOut > 0, 'the battery still serves the house at a flat price');
+close(simulate({ ...base, tariff: { fee: 0.05 } }, flat).buy[0] - r.buy[0], 0.03, 'purchase fee adds to the price');
+
 console.log('ok', { direct: direct.totals.netPrice.toFixed(3), cheap: cheap.totals.netPrice.toFixed(3) });
 
 // An afternoon slot charges only inside the slot.

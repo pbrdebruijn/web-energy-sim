@@ -1,7 +1,7 @@
 // Pure simulation of one day in 15 minute steps. No DOM, runs in node for test.js.
 
-// Zonneplan dynamic tariff, all incl. VAT, 2026 values from zonneplan.nl.
-export const TARIFF = { vat: 0.21, fee: 0.02, tax: 0.1108, sunBonus: 0.1 };
+// Zonneplan dynamic tariff, all incl. VAT, 2026 values from zonneplan.nl. cfg.tariff overrides fee, sunBonus and fixed (a flat € per kWh).
+export const TARIFF = { vat: 0.21, fee: 0.02, tax: 0.1108, sunBonus: 0.1, fixed: null };
 
 // Spot prices in EUR/kWh excl. VAT, 24 hourly values. Winter is the real NL day-ahead of 2026-11-10.
 export const SAMPLE = {
@@ -22,12 +22,12 @@ const HOME = [0.5, 0.4, 0.4, 0.4, 0.4, 0.5, 0.8, 1.2, 1.1, 0.9, 0.8, 0.8,
   0.9, 0.8, 0.8, 0.9, 1.1, 1.6, 1.9, 1.8, 1.5, 1.2, 0.9, 0.6];
 const HOME_SUM = HOME.reduce((a, b) => a + b);
 
-export const buyPrice = (spot) => spot * (1 + TARIFF.vat) + TARIFF.fee + TARIFF.tax;
+export const buyPrice = (spot, t = TARIFF) => t.fixed ?? spot * (1 + TARIFF.vat) + t.fee + TARIFF.tax;
 
 // With saldering (ends 2027-01-01) export offsets import one to one. Without it you get the bare spot price.
-export function sellPrice(spot, daylight, saldering) {
-  const bonus = daylight && spot > 0 ? TARIFF.sunBonus * (spot * (1 + TARIFF.vat) + TARIFF.fee) : 0;
-  return (saldering ? buyPrice(spot) : spot) + bonus;
+export function sellPrice(spot, daylight, saldering, t = TARIFF) {
+  const bonus = t.fixed == null && daylight && spot > 0 ? t.sunBonus * (spot * (1 + TARIFF.vat) + t.fee) : 0;
+  return (saldering ? buyPrice(spot, t) : spot) + bonus;
 }
 
 export function daylight(month) {
@@ -49,8 +49,9 @@ export function simulate(cfg, spot) {
     const t = tOf(i) - 0.5, f = t - Math.floor(t), h = Math.floor((t + 24) % 24);
     return ((HOME[h] * (1 - f) + HOME[(h + 1) % 24] * f) / HOME_SUM) * (cfg.yearlyKwh / 365) ;
   });
-  const buy = solar.map((_, i) => buyPrice(spot[i >> 2]));
-  const sell = solar.map((s, i) => sellPrice(spot[i >> 2], s > 0, cfg.saldering));
+  const t = { ...TARIFF, ...cfg.tariff };
+  const buy = solar.map((_, i) => buyPrice(spot[i >> 2], t));
+  const sell = solar.map((s, i) => sellPrice(spot[i >> 2], s > 0, cfg.saldering, t));
 
   const ev = cfg.ev, b = cfg.batt;
   // The car is at the charger during the slot, which may wrap past midnight. Outside it the car is on the road.
@@ -67,9 +68,9 @@ export function simulate(cfg, spot) {
   const nc = Math.sqrt(b.rte), nd = nc;
   const hours = [...Array(24).keys()].sort((x, y) => spot[x] - spot[y]);
   const nCharge = Math.min(8, Math.ceil(b.kwh / nc / b.kw));
-  const chargeH = new Set(hours.slice(0, nCharge));
-  const lowAvg = hours.slice(0, nCharge).reduce((a, h) => a + buyPrice(spot[h]), 0) / nCharge;
-  const disH = new Set(hours.filter((h) => !chargeH.has(h) && buyPrice(spot[h]) * b.rte > lowAvg));
+  const chargeH = new Set(t.fixed == null ? hours.slice(0, nCharge) : []); // a flat price leaves nothing to trade
+  const lowAvg = hours.slice(0, nCharge).reduce((a, h) => a + buyPrice(spot[h], t), 0) / nCharge;
+  const disH = new Set(t.fixed == null ? hours.filter((h) => !chargeH.has(h) && buyPrice(spot[h], t) * b.rte > lowAvg) : hours); // flat price: use it whenever needed
 
   let e = 0, c = 0, evSoc = targetKwh; // battery kWh stored, battery cost basis in EUR, car kWh
   let out;

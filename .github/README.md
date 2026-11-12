@@ -8,8 +8,9 @@ Try it at [pbrdebruijn.github.io/web-energy-sim](https://pbrdebruijn.github.io/w
 
 ## What it does
 
-- Plays a day of solar output, house use, battery and EV charging against hourly day-ahead prices. It loads today's live prices from EnergyZero, or uses a sample winter or summer day.
-- Prices follow the Zonneplan dynamic tariff: day-ahead price plus 21% VAT, a €0.02 purchase fee and €0.1108 energy tax per kWh. Saldering, net metering that ends on 1 January 2027, can be switched on or off.
+- Plays a day of solar output, house use, battery and EV charging against hourly day-ahead prices. It loads today's live prices, or uses a sample winter or summer day.
+- Pick your energy supplier: Zonneplan, Frank Energie or EnergyZero with dynamic prices, or a fixed price per kWh that you set. Live prices come from Frank Energie's open API for Frank, and from EnergyZero's open API for the others.
+- Dynamic prices are the day-ahead price plus 21% VAT, the supplier's purchase fee and €0.1108 energy tax per kWh. The purchase fee can be changed under **More settings**. Saldering, net metering that ends on 1 January 2027, can be switched on or off.
 - The home battery either trades on price or stores solar surplus only. The car charges in the cheapest hours of its slot, as soon as it plugs in, or from solar surplus only.
 - The result is the price per kWh that actually reaches the car battery, after charger, car and battery losses.
 - Click a label in the scene to change that device's settings. The sidebar has every setting, with the detailed ones under **More settings**.

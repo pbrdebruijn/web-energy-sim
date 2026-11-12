@@ -8,10 +8,18 @@ const $ = (id) => document.getElementById(id);
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 const cfg = {
-  yearlyKwh: 3500, month: new Date().getMonth(), kWp: 5.5, weather: 1, saldering: true, priceSrc: 'live',
+  yearlyKwh: 3500, month: new Date().getMonth(), kWp: 5.5, weather: 1, saldering: true, priceSrc: 'live', provider: 'zonneplan', fee: 0.02, fixedPrice: 0.27,
   batt: { on: true, kwh: 10, kw: 5, rte: 0.85, mode: 'smart', feedEv: true },
   // Tesla Model Y Long Range: about 75 kWh usable, 16.5 kWh per 100 km in mixed driving
   ev: { on: true, kwh: 75, cons: 16.5, km: 50, from: 18, until: 7.5, chargerKw: 11, eff: 0.9, target: 80, mode: 'cheap' },
+};
+// Dutch dynamic suppliers. All pay the same day-ahead price plus their own purchase fee (incl. VAT, 2026).
+// Live prices come from the supplier's open API, or from EnergyZero's for suppliers without one.
+const PROVIDERS = {
+  zonneplan: { fee: 0.02, sunBonus: 0.1, api: 'energyzero' },
+  frank: { fee: 0.01815, sunBonus: 0, api: 'frank' },
+  energyzero: { fee: 0.028, sunBonus: 0, api: 'energyzero' },
+  fixed: { fee: 0, sunBonus: 0, api: 'energyzero' }, // spot still sets the export price without saldering
 };
 const get = (p, o = cfg) => p.split('.').reduce((x, k) => x[k], o);
 const set = (p, v) => { const ks = p.split('.'), last = ks.pop(); ks.reduce((o, k) => o[k], cfg)[last] = v; };
@@ -46,6 +54,9 @@ const SECTIONS = [
     A(R('ev.cons', 'Consumption', 12, 25, 0.5, 'kWh/100 km')),
   ]],
   ['Prices', 'grid', null, [
+    S('provider', 'Energy supplier', [['zonneplan', 'Zonneplan, dynamic'], ['frank', 'Frank Energie, dynamic'], ['energyzero', 'EnergyZero, dynamic'], ['fixed', 'Fixed price']]),
+    R('fixedPrice', 'Fixed price, all in', 10, 60, 0.5, 'ct per kWh', 100),
+    A(R('fee', 'Purchase fee on top of the day-ahead price', 0, 6, 0.05, 'ct per kWh', 100)),
     S('priceSrc', 'Day-ahead prices', [['live', 'Today, live'], ['winter', 'Sample winter day'], ['summer', 'Sample sunny summer day']]),
     C('saldering', 'Saldering, ends 1 January 2027'),
   ]],
@@ -117,7 +128,8 @@ const onInput = (e) => {
   else if (el.tagName === 'SELECT') set(p, c.opts[el.value][0]);
   else set(p, el.value / c.k);
   sync(p);
-  if (p === 'priceSrc') loadPrices(); else recompute();
+  if (p === 'provider') { cfg.fee = PROVIDERS[cfg.provider].fee; sync('fee'); }
+  if (p === 'priceSrc' || p === 'provider') loadPrices(); else recompute();
 };
 $('controls').addEventListener('input', onInput);
 
@@ -164,9 +176,8 @@ async function loadPrices(keepMonth = false) {
     try {
       const from = new Date(); from.setHours(0, 0, 0, 0);
       const till = new Date(+from + 864e5 - 1);
-      const res = await fetch(`https://api.energyzero.nl/v1/energyprices?fromDate=${from.toISOString()}&tillDate=${till.toISOString()}&interval=4&usageType=1&inclBtw=false`);
-      const prices = (await res.json()).Prices.map((x) => x.price);
-      if (prices.length !== 24) throw new Error(`got ${prices.length} hours`);
+      const prices = PROVIDERS[cfg.provider].api === 'frank' ? await frankPrices(from) : await energyZeroPrices(from, till);
+      if (prices.length !== 24 || !prices.every(Number.isFinite)) throw new Error(`got ${prices.length} hours`);
       spot = prices;
     } catch (err) {
       console.warn('Live prices failed, using the sample winter day.', err);
@@ -183,8 +194,26 @@ async function loadPrices(keepMonth = false) {
   recompute();
 }
 
+async function energyZeroPrices(from, till) {
+  const res = await fetch(`https://api.energyzero.nl/v1/energyprices?fromDate=${from.toISOString()}&tillDate=${till.toISOString()}&interval=4&usageType=1&inclBtw=false`);
+  return (await res.json()).Prices.map((x) => x.price);
+}
+
+// Frank Energie's public GraphQL API: hourly market price excl. VAT and their own purchase fee
+async function frankPrices(from) {
+  const day = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const res = await fetch('https://graphql.frankenergie.nl', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ query: `query { marketPrices(date: "${day(from)}") { electricityPrices { from marketPrice sourcingMarkupPrice } } }` }),
+  });
+  const list = (await res.json()).data.marketPrices.electricityPrices;
+  if (Number.isFinite(list[0]?.sourcingMarkupPrice)) { cfg.fee = list[0].sourcingMarkupPrice; sync('fee'); }
+  return list.map((x) => x.marketPrice);
+}
+
 function recompute() {
-  r = simulate(cfg, spot);
+  const p = PROVIDERS[cfg.provider];
+  r = simulate({ ...cfg, tariff: { fee: cfg.fee, sunBonus: p.sunBonus, fixed: cfg.provider === 'fixed' ? cfg.fixedPrice : null } }, spot);
   version++;
   history.replaceState(null, '', `#${encodeCfg()}`);
   renderResults();
