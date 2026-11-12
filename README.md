@@ -2,7 +2,7 @@
 
 A Home Assistant dashboard card that draws your home as a small 3D scene. Power flows along the cables as moving dots: solar from the roof, the grid at the pole, the home battery by the wall and the car at the charger. Below the scene, a chart shows today so far: price, power per device and charge levels.
 
-![The card on a dashboard: a 3D house with labels for solar, home use, battery, grid and car, and a chart of today below it](https://raw.githubusercontent.com/pbrdebruijn/web-energy-sim/main/docs/card-preview.png)
+![The card on a dashboard: a 3D house with labels for solar, home use, battery, grid and car, and a chart of today below it](https://raw.githubusercontent.com/pbrdebruijn/web-energy-sim/main/docs/card-main.png)
 
 What the card does:
 
@@ -22,17 +22,10 @@ You don't need every device. Leave out the battery or the car and the card shows
 
 ### Variations
 
-A town house in a row (`house: terraced`), with the battery and charger in front and up to 4 devices listed in the corner:
-
-![A narrow brick town house with a flat roof and solar panels between grey neighbours, the battery and charger on the sidewalk in front](https://raw.githubusercontent.com/pbrdebruijn/web-energy-sim/main/docs/card-terraced.png)
-
-A light theme in Dutch, with the number format and currency from Home Assistant:
-
-![The card in a light theme with Dutch labels such as Zon, Net and Thuisbatterij, and decimal commas](https://raw.githubusercontent.com/pbrdebruijn/web-energy-sim/main/docs/card-light-nl.png)
-
-A narrow card without the chart and the seasonal effects (`chart: false`, `effects: false`, `height: 340`):
-
-![A narrow card showing only the scene and today's totals, with smaller labels](https://raw.githubusercontent.com/pbrdebruijn/web-energy-sim/main/docs/card-compact.png)
+| Town house in a row | Light theme in Dutch | Narrow, no chart or effects |
+|---|---|---|
+| <img src="https://raw.githubusercontent.com/pbrdebruijn/web-energy-sim/main/docs/card-terraced.png" width="260" alt="A narrow brick town house with a flat roof between grey neighbours, battery and charger in front"> | <img src="https://raw.githubusercontent.com/pbrdebruijn/web-energy-sim/main/docs/card-light-nl.png" width="260" alt="The card in a light theme with Dutch labels and decimal commas"> | <img src="https://raw.githubusercontent.com/pbrdebruijn/web-energy-sim/main/docs/card-compact.png" width="200" alt="A narrow card with only the scene and today's totals"> |
+| `house: terraced` | Follows your Home Assistant language and theme | `chart: false`, `effects: false` |
 
 ## Install
 
