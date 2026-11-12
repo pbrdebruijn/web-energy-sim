@@ -128,7 +128,13 @@ assert.deepEqual(entitiesFromEnergyPrefs({ energy_sources: [
 ] }), { grid: 'sensor.grid_power', solar: 'sensor.pv_power', battery_soc: 'sensor.batt_soc' }, 'energy dashboard sensors');
 assert.deepEqual(entitiesFromEnergyPrefs({ energy_sources: [{ type: 'grid', flow_from: [], power: [{ stat_rate: 'sensor.p1' }] }] }), { grid: 'sensor.p1' }, 'pre-2025 grid format');
 assert.deepEqual(entitiesFromEnergyPrefs(null), {}, 'no Energy dashboard');
-checkConfig({ devices: [{ entity: 'sensor.hp_power' }] }); // old configs with devices still load
+const withDevices = { entities: {}, devices: [{ entity: 'sensor.hp_power', type: 'heat_pump', name: 'Warmtepomp' }, { entity: 'sensor.wm_power', type: 'other' }] };
+assert.deepEqual(fromFormData(toFormData(withDevices), withDevices), withDevices, 'devices survive the editor');
+assert.deepEqual(fromFormData({ device_2: 'sensor.ac_power' }, {}).devices, [{ entity: 'sensor.ac_power', type: 'other' }], 'empty slots are skipped');
+assert.equal(fromFormData({}, withDevices).devices, undefined, 'clearing every slot removes devices');
+checkConfig({ devices: [{ entity: 'sensor.hp_power', type: 'heat_pump', name: 'Warmtepomp' }] });
+assert.throws(() => checkConfig({ devices: [{ entity: 'sensor.x', type: 'rocket' }] }), /not one of/);
+assert.throws(() => checkConfig({ devices: [{ type: 'ac' }] }), /entity/);
 
 // Today's totals: kWh meters per kind, then the share covered without the grid
 const stats = energyStatsFromPrefs({ energy_sources: [

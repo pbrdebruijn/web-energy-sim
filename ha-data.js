@@ -3,6 +3,7 @@
 import { N, DT } from './sim.js';
 
 export const POWER_KEYS = ['solar', 'grid', 'battery', 'ev', 'home'];
+export const DEVICE_TYPES = ['heat_pump', 'ac', 'boiler', 'washing_machine', 'other'];
 export const ENTITY_KEYS = [...POWER_KEYS, 'battery_soc', 'ev_soc', 'ev_plugged', 'price', 'weather'];
 const SLOT_MS = DT * 3600e3;
 
@@ -18,6 +19,14 @@ export function checkConfig(config) {
     if (!POWER_KEYS.includes(k)) throw new Error(`invert can list ${POWER_KEYS.join(', ')}, not "${k}".`);
   }
   if (config.ev_name !== undefined && typeof config.ev_name !== 'string') throw new Error('ev_name must be text.');
+  if (config.devices !== undefined) {
+    if (!Array.isArray(config.devices) || config.devices.length > 4) throw new Error('devices must be a list of at most 4 devices.');
+    for (const d of config.devices) {
+      if (typeof d?.entity !== 'string' || !/^[a-z_]+\.[a-z0-9_]+$/.test(d.entity)) throw new Error('Each device needs "entity:" with a power sensor, like sensor.heat_pump_power.');
+      if (d.type !== undefined && !DEVICE_TYPES.includes(d.type)) throw new Error(`Device type "${d.type}" is not one of ${DEVICE_TYPES.join(', ')}.`);
+      if (d.name !== undefined && typeof d.name !== 'string') throw new Error('A device name must be text.');
+    }
+  }
   if (config.cheapest_hours !== undefined && !(Number.isInteger(config.cheapest_hours) && config.cheapest_hours >= 0 && config.cheapest_hours <= 24)) {
     throw new Error('cheapest_hours must be a whole number from 0 to 24.');
   }
@@ -148,7 +157,12 @@ export function guessEntities(states) {
 
 // The editor form is flat; the card config keeps sensors under entities.
 const OPTION_KEYS = ['invert', 'ev_name', 'solar_kwp', 'height', 'chart', 'totals', 'cheapest_hours', 'quality', 'tap_action', 'hold_action'];
-export const toFormData = (config) => ({ ...config.entities, ...Object.fromEntries(OPTION_KEYS.map((k) => [k, config[k]])) });
+// Devices sit in the form as device_1, device_1_type and device_1_name, up to 4
+const DEVICE_SLOTS = [1, 2, 3, 4];
+export const toFormData = (config) => ({
+  ...config.entities, ...Object.fromEntries(OPTION_KEYS.map((k) => [k, config[k]])),
+  ...Object.fromEntries((config.devices ?? []).flatMap((d, k) => [[`device_${k + 1}`, d.entity], [`device_${k + 1}_type`, d.type], [`device_${k + 1}_name`, d.name]])),
+});
 export function fromFormData(data, config) {
   const out = { ...config, entities: {} };
   for (const k of ENTITY_KEYS) if (data[k]) out.entities[k] = data[k];
@@ -157,6 +171,10 @@ export function fromFormData(data, config) {
     if (v === undefined || v === '' || (Array.isArray(v) && !v.length)) delete out[k];
     else out[k] = v;
   }
+  const devices = DEVICE_SLOTS.filter((n) => data[`device_${n}`]).map((n) => ({
+    entity: data[`device_${n}`], type: data[`device_${n}_type`] || 'other', ...(data[`device_${n}_name`] ? { name: data[`device_${n}_name`] } : {}),
+  }));
+  if (devices.length) out.devices = devices; else delete out.devices;
   return out;
 }
 
@@ -238,7 +256,7 @@ export function sunHours(st) {
   return rise != null && set != null && set > rise ? { rise, set } : null;
 }
 
-// The Home Assistant action for a tap or hold on a label (solar, home, grid, battery, ev):
+// The Home Assistant action for a tap or hold on a label (solar, home, grid, battery, ev) or a device:
 // per-label config first, then the card-wide one. null means the card's default (tap opens details).
 export const ACTION_KEYS = ['solar', 'home', 'grid', 'battery', 'ev'];
 export const actionFor = (config, key, kind) => config.actions?.[key]?.[`${kind}_action`] ?? config[`${kind}_action`] ?? null;

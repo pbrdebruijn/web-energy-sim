@@ -2,8 +2,8 @@
 // and the chart below shows today so far. Built into dist/energy-scene-card.js by `npm run build`.
 import { createScene } from './scene.js';
 import { daylight, N, DT } from './sim.js';
-import { createChart, renderLabels, UI_CSS, hhmm, kwh, pct, fmt, tr, setLocale, totalsHtml, totalsToggle } from './ui.js';
-import { checkConfig, toValue, weatherFactor, historyPoints, bucket, pricesFromAttributes, buildDay, guessEntities, toFormData, fromFormData, POWER_KEYS, entitiesFromEnergyPrefs, energyStatsFromPrefs, dayTotals, forecastSlots, cheapestHours, sunHours, actionFor } from './ha-data.js';
+import { createChart, renderLabels, UI_CSS, hhmm, esc, kwh, pct, fmt, tr, setLocale, totalsHtml, totalsToggle } from './ui.js';
+import { checkConfig, toValue, weatherFactor, historyPoints, bucket, pricesFromAttributes, buildDay, guessEntities, toFormData, fromFormData, POWER_KEYS, DEVICE_TYPES, entitiesFromEnergyPrefs, energyStatsFromPrefs, dayTotals, forecastSlots, cheapestHours, sunHours, actionFor } from './ha-data.js';
 
 const LABEL_ENTITY = { solar: 'solar', home: 'home', grid: 'grid', batt: 'battery', ev: 'ev' };
 const HISTORY_EVERY = 5 * 60e3, CHART_EVERY = 5e3, SCRUB_HOLD = 15e3;
@@ -20,12 +20,18 @@ ha-card { overflow: hidden; }
 .clock { left: 12px; bottom: 12px; padding: 6px 10px; }
 .clock time { font-size: 20px; }
 .charts { position: relative; padding: 10px 14px 6px; }
+.devices { position: absolute; top: 10px; right: 10px; z-index: 1; display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
+.devices button { all: unset; cursor: pointer; display: flex; justify-content: space-between; gap: 12px; padding: 3px 9px; border-radius: 6px;
+  font-size: 12px; color: #c3c2b7; background: rgba(26, 26, 25, .88); border: 1px solid rgba(255, 255, 255, .1); border-left: 3px solid #3987e5; }
+.devices button:focus-visible { outline: 2px solid #3987e5; }
+.devices b { color: #f0efec; font-variant-numeric: tabular-nums; }
 /* Narrow cards: smaller labels with only the main number */
 .stage { container-type: inline-size; }
 @container (max-width: 480px) {
   .tag { font-size: 10px; padding: 2px 6px; }
   .tag b { font-size: 12px; }
   .tag .mix, .tag .soc { display: none; }
+  .devices button { font-size: 10px; padding: 2px 6px; }
   .clock time { font-size: 15px; }
   .clock small { display: none; }
 }
@@ -71,6 +77,9 @@ class EnergySceneCard extends HTMLElement {
   // Sensors from the Energy dashboard, overridden by the card config
   get entities() { return { ...this.fromEnergy, ...this.config.entities }; }
 
+  // Extra devices, only the ones picked in the card config
+  get devices() { return this.config.devices ?? []; }
+
   async loadEnergyPrefs() {
     this.prefsAsked = true;
     const prefs = await energyPrefs(this._hass);
@@ -90,7 +99,7 @@ class EnergySceneCard extends HTMLElement {
     const e = this.entities, withChart = this.config.chart !== false;
     const root = this.shadowRoot ?? this.attachShadow({ mode: 'open' });
     root.innerHTML = `<style>${UI_CSS}${CARD_CSS}</style><ha-card>
-      <div class="stage" style="height:${this.height}px"><div class="clock"><time></time><small></small></div><button class="totals-btn" hidden></button></div>
+      <div class="stage" style="height:${this.height}px"><div class="clock"><time></time><small></small></div><div class="devices"></div><button class="totals-btn" hidden></button></div>
       <div class="totals" hidden></div>
       <p class="warn" hidden></p>
       ${withChart ? `<section class="charts"><div class="legend"></div>
@@ -103,7 +112,7 @@ class EnergySceneCard extends HTMLElement {
     this.still = matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     this.frameMs = this.still ? 1000 : low ? 1000 / 20 - 2 : FRAME_MS;
     // Fill cost scales with pixel count, and 1.5 still looks sharp at card size
-    this.scene = createScene(q('.stage'), { maxPixelRatio: low ? 1 : 1.5, shadows: !low });
+    this.scene = createScene(q('.stage'), { maxPixelRatio: low ? 1 : 1.5, shadows: !low, devices: this.devices });
     for (const [key, el] of Object.entries(this.scene.labels)) {
       const actionKey = LABEL_ENTITY[key], entityId = e[actionKey];
       if (!entityId && !actionFor(this.config, actionKey, 'tap')) continue;
@@ -113,6 +122,9 @@ class EnergySceneCard extends HTMLElement {
       this.bind(el, actionKey, entityId);
       el.onkeydown = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); this.act(actionKey, entityId, 'tap'); } };
     }
+    // Device chips: one button each, filled in by frame()
+    q('.devices').innerHTML = this.devices.map((d, k) => `<button data-k="${k}" title="${tr('Show details and history')}"></button>`).join('');
+    q('.devices').querySelectorAll('button').forEach((b, k) => this.bind(b, 'device', this.devices[k].entity));
     this.show = { batt: !!(e.battery || e.battery_soc), ev: !!(e.ev || e.ev_soc), price: !!e.price };
     this.chart = withChart && createChart({ svg: q('.chart'), tip: q('.tip'), legend: q('.legend'), box: q('.charts') }, (h) => {
       this.viewT = h;
@@ -122,6 +134,8 @@ class EnergySceneCard extends HTMLElement {
     if (withChart) this.ro.observe(q('.charts'));
     this.live = {};
     this.seen = {};
+    this.devValues = [];
+    this.devNames = {};
     this.weather = 1;
     this.evAnim = 0;
     this.r = buildDay({});
@@ -232,8 +246,15 @@ class EnergySceneCard extends HTMLElement {
   applyLive(force = false) {
     const hass = this._hass, e = this.entities;
     if (!hass || !this.scene) return;
-    const ids = Object.values(e);
+    const ids = [...Object.values(e), ...this.devices.map((d) => d.entity)];
     if (!force && ids.every((id) => hass.states[id] === this.seen[id])) return; // nothing of ours changed
+    this.devValues = this.devices.map((d) => {
+      const st = hass.states[d.entity];
+      this.seen[d.entity] = st;
+      if (!st) return null;
+      this.devNames[d.entity] = d.name ?? st.attributes.friendly_name ?? d.entity;
+      return toValue('home', st.state, st.attributes.unit_of_measurement);
+    });
     const invert = this.config.invert ?? [], missing = [];
     let prices = null;
     for (const [k, id] of Object.entries(e)) {
@@ -245,6 +266,7 @@ class EnergySceneCard extends HTMLElement {
       if (k === 'price') prices = pricesFromAttributes(st.attributes, st.attributes.unit_of_measurement, +midnight());
     }
     if (!e.grid && this.prefsAsked) missing.push(tr('no grid power sensor. Pick one in the card editor, or add one to the Energy dashboard'));
+    missing.push(...this.devices.filter((d) => !hass.states[d.entity]).map((d) => d.entity));
     this.warn(missing.length ? `${tr('Entity not found')}: ${missing.join(', ')}` : this.histError ?? '');
 
     const i = Math.min(N - 1, Math.floor(hourOf(new Date()) / DT));
@@ -289,6 +311,10 @@ class EnergySceneCard extends HTMLElement {
     if (key !== this.labelKey) {
       this.labelKey = key;
       renderLabels(this.scene.labels, r, i, { batt: this.show.batt, ev: this.show.ev, evName: this.config.ev_name ?? 'EV', away });
+      this.q('.devices').querySelectorAll('button').forEach((b, k) => { // devices show their live power, also while replaying earlier today
+        const d = this.devices[k];
+        b.innerHTML = `<span>${esc(this.devNames[d.entity] ?? d.entity)}</span><b>${fmt.num(Math.abs(this.devValues[k] ?? 0), 1)} kW</b>`;
+      });
       this.q('.clock small').innerHTML = `${tr(live ? 'Now' : 'Earlier today')}${r.buy[i] == null ? '' : `<br>${fmt.money(r.buy[i], 3)} ${tr('per kWh')}`}`;
       this.renderTotals(); // follows a language change
     }
@@ -299,7 +325,7 @@ class EnergySceneCard extends HTMLElement {
     this.scene.update({
       t, month, rise, set, weather: this.weather, kWp: Number(this.config.solar_kwp ?? 5.5),
       solar: r.solar[i] ?? 0, home: r.home[i] ?? 0, ev: r.ev[i] ?? 0, batt: r.batt[i] ?? 0, grid: r.grid[i] ?? 0,
-      battSoc: r.battSoc[i] ?? 0, battOn: this.show.batt, evOn: this.show.ev, evAway: this.evAnim, evPlugged: !away, still: this.still,
+      battSoc: r.battSoc[i] ?? 0, battOn: this.show.batt, evOn: this.show.ev, evAway: this.evAnim, evPlugged: !away, devices: this.devValues, still: this.still,
     }, dt);
     this.raf = requestAnimationFrame(this.frame);
   };
@@ -331,8 +357,20 @@ const FIELDS = [
   ['tap_action', 'Tap on a label', 'Default: show details and history', { ui_action: {} }],
   ['hold_action', 'Hold on a label', null, { ui_action: {} }],
 ];
-const SCHEMA = FIELDS.map(([name, , , selector]) => ({ name, selector }));
+const DEVICE_TYPE_LABELS = { heat_pump: 'Heat pump', ac: 'Air conditioning', boiler: 'Boiler', washing_machine: 'Washing machine', other: 'Other' };
+for (const n of [1, 2, 3, 4]) FIELDS.push(
+  [`device_${n}`, `Device ${n} power`, n === 1 ? 'A device with its own power sensor, shown as a small model in front of the house' : null, sensor],
+  [`device_${n}_type`, 'Model', null, { select: { mode: 'dropdown', options: DEVICE_TYPES.map((value) => ({ value, label: DEVICE_TYPE_LABELS[value] })) } }],
+  [`device_${n}_name`, 'Name', 'Empty: the sensor name', { text: {} }],
+);
 const FIELD = Object.fromEntries(FIELDS.map((f) => [f[0], f]));
+const field = ([name, , , selector]) => ({ name, selector });
+// Devices go in a collapsed section at the end, one row per device
+const SCHEMA = [
+  ...FIELDS.filter(([k]) => !k.startsWith('device_')).map(field),
+  { type: 'expandable', name: '', title: 'Devices', icon: 'mdi:heat-pump', schema: [1, 2, 3, 4].map((n) => (
+    { type: 'grid', name: '', column_min_width: '140px', schema: [`device_${n}`, `device_${n}_type`, `device_${n}_name`].map((k) => field(FIELD[k])) })) },
+];
 
 // The Energy dashboard setup, or null when it is not set up (the call then fails with not_found)
 const energyPrefs = (hass) => hass.callWS({ type: 'energy/get_prefs' }).catch(() => null);
@@ -353,8 +391,8 @@ class EnergySceneCardEditor extends HTMLElement {
     if (!this.config || !this._hass) return;
     if (!this.form) {
       this.form = document.createElement('ha-form');
-      this.form.computeLabel = (f) => FIELD[f.name][1];
-      this.form.computeHelper = (f) => FIELD[f.name][2] ?? '';
+      this.form.computeLabel = (f) => FIELD[f.name]?.[1] ?? f.title;
+      this.form.computeHelper = (f) => FIELD[f.name]?.[2] ?? '';
       this.form.addEventListener('value-changed', (e) => {
         this.config = fromFormData(e.detail.value, this.config);
         this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: this.config }, bubbles: true, composed: true }));
