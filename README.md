@@ -14,11 +14,25 @@ What the card does:
 - The car drives off when it is unplugged and parks again when it comes back, if you add a plugged-in sensor.
 - A row of tiles shows today's totals from the Energy dashboard: imported, exported, solar, the share of your use covered without the grid, and today's energy cost when the Energy dashboard tracks it. They are the same meter readings the Energy dashboard uses, refreshed every 5 minutes.
 - The chart marks the cheapest hours still to come in green and negative prices in blue, and continues the solar line as a dashed forecast when the Energy dashboard has a solar forecast, such as Forecast.Solar.
-- Drag across the chart to replay earlier today in the scene. After 15 seconds the card returns to now.
+- Drag across the chart to replay earlier today in the scene. Press **Back to now** next to the clock to return to live, or wait 15 seconds.
 - The card only animates while it is on screen, so a wall tablet does not spend its battery on a hidden card.
 - If your device asks for reduced motion, the scene stops moving and only updates its numbers and the time of day. On narrow cards the labels get smaller and show only the main number.
 
 You don't need every device. Leave out the battery or the car and the card shows them as off.
+
+### Variations
+
+A town house in a row (`house: terraced`), with the battery and charger in front and up to 4 devices listed in the corner:
+
+![A narrow brick town house with a flat roof and solar panels between grey neighbours, the battery and charger on the sidewalk in front](https://raw.githubusercontent.com/pbrdebruijn/web-energy-sim/main/docs/card-terraced.png)
+
+A light theme in Dutch, with the number format and currency from Home Assistant:
+
+![The card in a light theme with Dutch labels such as Zon, Net and Thuisbatterij, and decimal commas](https://raw.githubusercontent.com/pbrdebruijn/web-energy-sim/main/docs/card-light-nl.png)
+
+A narrow card without the chart and the seasonal effects (`chart: false`, `effects: false`, `height: 340`):
+
+![A narrow card showing only the scene and today's totals, with smaller labels](https://raw.githubusercontent.com/pbrdebruijn/web-energy-sim/main/docs/card-compact.png)
 
 ## Install
 
