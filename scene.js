@@ -414,6 +414,7 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
   const resize = () => {
     const { clientWidth: w, clientHeight: h } = container;
     renderer.setSize(w, h);
+    for (const el of Object.values(labels)) el._t = null; // narrow cards restyle the labels, so measure again
     camera.aspect = w / h;
     // Below aspect 1.2, widen the vertical view so narrow (portrait) screens still show the whole lot side to side.
     camera.fov = 2 * THREE.MathUtils.radToDeg(Math.atan(Math.tan(THREE.MathUtils.degToRad(16)) * Math.max(1, 1.2 / camera.aspect)));
@@ -507,13 +508,37 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
     renderer.render(scene, camera);
 
     const { clientWidth: w, clientHeight: h } = container;
+    const placed = [];
     for (const [key, el] of Object.entries(labels)) {
       tmp.set(...LABEL_AT[key]);
       if (key === 'ev' && car.visible) { if (row) tmp.x = Math.min(car.position.x, 9); else tmp.z = Math.min(car.position.z, 8); }
       tmp.project(camera);
-      if (el._t !== el.textContent) { el._t = el.textContent; el._w = el.offsetWidth; } // measure only when the text changes
+      if (el._t !== el.textContent) { el._t = el.textContent; el._w = el.offsetWidth; el._h = el.offsetHeight; } // measure only when the text changes
       const x = THREE.MathUtils.clamp(((tmp.x + 1) / 2) * w, el._w / 2 + 4, w - el._w / 2 - 4); // keep labels inside narrow cards
-      const tr = `translate(-50%,-100%) translate(${x.toFixed(1)}px,${(((1 - tmp.y) / 2) * h).toFixed(1)}px)`;
+      placed.push({ el, x, y: ((1 - tmp.y) / 2) * h }); // y is the bottom edge
+    }
+    // Zooming out brings labels together: push each one below any higher label it would cover
+    placed.sort((a, b) => a.y - b.y);
+    for (let i = 0; i < placed.length; i++) {
+      const a = placed[i], hw = a.el._w / 2;
+      for (let j = 0, tries = 0; j < i; j++) {
+        const b = placed[j], gap = (a.el._w + b.el._w) / 2 + 5; // 1px more than the test needs, so rounding cannot loop
+        if (Math.abs(a.x - b.x) < gap - 1 && a.y - a.el._h < b.y + 4 && b.y - b.el._h < a.y + 4) {
+          // Take the smallest step: down below b, or beside it while it stays inside the card
+          const down = b.y + 5 + a.el._h - a.y, left = a.x - (b.x - gap), right = b.x + gap - a.x;
+          const canL = b.x - gap >= hw + 4 && tries < 8, canR = b.x + gap <= w - hw - 4 && tries < 8;
+          if (canL && left <= right && left < down) a.x = b.x - gap;
+          else if (canR && right < down) a.x = b.x + gap;
+          else a.y += down;
+          tries++;
+          j = -1; // moved, so check the higher labels again
+        }
+      }
+    }
+    const glide = dt ? 1 - Math.exp(-dt * 12) : 1; // glide into the new spot instead of jumping
+    for (const { el, x, y } of placed) {
+      el._y = el._y === undefined ? y : el._y + (y - el._y) * glide;
+      const tr = `translate(-50%,-100%) translate(${x.toFixed(1)}px,${el._y.toFixed(1)}px)`;
       if (el.dataset.tr !== tr) el.style.transform = el.dataset.tr = tr; // unchanged writes still cost a restyle; style.transform reads back reformatted
     }
   }
