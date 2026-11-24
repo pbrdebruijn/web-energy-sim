@@ -6,7 +6,8 @@
     "start": "python3 -m http.server 5173 -b 127.0.0.1",
     "test": "node test.js",
     "build": "esbuild card.js --bundle --minify --format=esm --target=es2020 --legal-comments=none --outfile=dist/energy-scene-card.js",
-    "bench": "node bench.js"
+    "bench": "node bench.js",
+    "assets": "/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python blender/build_scene.py -- assets/scene.glb"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

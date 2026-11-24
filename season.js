@@ -95,7 +95,7 @@ export function createSeasons({ scene, add, box, mat, grassMat, coneMat, row = f
   add(new THREE.ConeGeometry(0.06, 0.3, 8).rotateX(Math.PI / 2), mat('#e67e22'), 0, 1.8, 0.38, snowman);
   box(0.36, 0.3, 0.36, dark, 0, 2.15, 0, snowman);
   for (const x of [-0.1, 0.1]) box(0.05, 0.05, 0.02, dark, x, 1.88, 0.26, snowman);
-  snowman.position.set(...(row ? [-2.6, 0, 3] : [-4.6, 0, 5]));
+  snowman.position.set(...(row ? [-7.2, 0, 3] : [-4.6, 0, 5]));
   scene.add(snowman);
   casters(snowman);
   const pumpkin = add(new THREE.SphereGeometry(0.32, 14, 10).scale(1, 0.75, 1), mat('#e67e22', { emissive: '#ff8c00', emissiveIntensity: 0 }), -1.05, 0.24, 2.6);

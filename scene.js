@@ -45,7 +45,8 @@ const LAYOUTS = {
 const PARTICLES = 16;
 const DOT = Object.fromEntries(Object.entries(COLORS).map(([k, c]) => [k, new THREE.Color(c)]));
 
-export function createScene(container, { maxPixelRatio = 2, devices = [], shadows = true, house = 'detached' } = {}) {
+// model: optional glTF scene from blender/build_scene.py with detailed parts; without it the scene uses simple shapes (the HA card)
+export function createScene(container, { maxPixelRatio = 2, devices = [], shadows = true, house = 'detached', model = null } = {}) {
   const row = house === 'terraced', L = LAYOUTS[row ? 'terraced' : 'detached'];
   const { hub: HUB, paths: PATHS, labels: LABEL_AT } = L;
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -182,6 +183,20 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
   };
   const panelMat = mat('#ffffff', { map: paint(128, cells), emissive: '#4f8fff', emissiveIntensity: 0, roughness: 0.25, metalness: 0.4 });
   const panelCount = 27;
+  const coneMat = mat('#3f8f4f', { flatShading: true });
+  // Detailed parts from the model, with a few materials swapped for live ones (night glow, seasons, brick texture)
+  const live = { glass: windowMat, lamp: lampMat, pine: coneMat, brick: row ? mat('#ffffff', { map: paint(128, grid('#b8674a', '#d8c7b4', 4, 16, 0.5)) }) : null };
+  const part = (name) => {
+    const g = model?.getObjectByName(name)?.clone();
+    g?.traverse((o) => {
+      if (!o.isMesh) return;
+      o.castShadow = o.receiveShadow = true;
+      o.material = live[o.material.name] ?? o.material;
+    });
+    return g ?? null;
+  };
+  const kit = part(row ? 'terraced' : 'detached');
+  if (kit) scene.add(kit);
   const panels = new THREE.InstancedMesh(new THREE.BoxGeometry(0.88, 1.12, 0.06), panelMat, panelCount);
   if (!row) {
     receive(box(26, 0.5, 22, grassMat, 0, -0.25, 0));
@@ -192,32 +207,36 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
     many(new THREE.BoxGeometry(1.2, 0.02, 0.14), trim, [-12, -8, -4, 0, 4, 8, 12].map((x) => [x, 0.07, 9.5])); // centre line
 
     // House: x -6..2, z -4..2, front faces +z
-    cast(receive(box(8, 3.2, 6, mat('#f2e6d0'), -2, 1.6, -1)));
-    box(8.1, 0.3, 6.1, mat('#d9cdb6'), -2, 0.15, -1); // plinth
-    const tri = new THREE.Shape([new THREE.Vector2(-3.4, 0), new THREE.Vector2(3.4, 0), new THREE.Vector2(0, 2.2)]);
-    const roof = cast(receive(add(new THREE.ExtrudeGeometry(tri, { depth: 8.8, bevelEnabled: false }), mat('#b5533c'), -6.4, 3.2, -1)));
-    roof.rotation.y = Math.PI / 2;
-    box(8.9, 0.16, 0.18, mat('#8e3c2b'), -2, 5.42, -1); // ridge
-    cast(box(0.7, 1.9, 0.7, mat('#9c4a36'), -4.4, 4.95, -2.4)); // chimney on the back slope, clear of the panels
-    box(0.86, 0.12, 0.86, mat('#3a3f47'), -4.4, 5.95, -2.4);
-    box(8.9, 0.14, 0.16, trim, -2, 3.16, 2.46); // gutter
-    box(1.3, 2.2, 0.08, trim, -2, 1.1, 2.0);
-    box(1.1, 2.1, 0.1, mat('#7a4b2a'), -2, 1.05, 2.02);
-    box(0.07, 0.07, 0.1, mat('#d4af37', { metalness: 0.8, roughness: 0.3 }), -1.62, 1.0, 2.1); // door handle
-    box(1.6, 0.14, 0.5, concrete, -2, 0.07, 2.3); // step
-    for (const x of [-4.6, 0.4]) win(1.5, 1.2, x, 1.9, 2.02, windowMat);
-    box(0.1, 1.1, 1.2, windowMat, 2.02, 2.1, -0.7);
-    box(0.25, 0.5, 0.4, mat('#e8e8e8'), 2.12, 1.5, 0.7); // meter cupboard
+    if (!kit) {
+      cast(receive(box(8, 3.2, 6, mat('#f2e6d0'), -2, 1.6, -1)));
+      box(8.1, 0.3, 6.1, mat('#d9cdb6'), -2, 0.15, -1); // plinth
+      const tri = new THREE.Shape([new THREE.Vector2(-3.4, 0), new THREE.Vector2(3.4, 0), new THREE.Vector2(0, 2.2)]);
+      const roof = cast(receive(add(new THREE.ExtrudeGeometry(tri, { depth: 8.8, bevelEnabled: false }), mat('#b5533c'), -6.4, 3.2, -1)));
+      roof.rotation.y = Math.PI / 2;
+      box(8.9, 0.16, 0.18, mat('#8e3c2b'), -2, 5.42, -1); // ridge
+      cast(box(0.7, 1.9, 0.7, mat('#9c4a36'), -4.4, 4.95, -2.4)); // chimney on the back slope, clear of the panels
+      box(0.86, 0.12, 0.86, mat('#3a3f47'), -4.4, 5.95, -2.4);
+      box(8.9, 0.14, 0.16, trim, -2, 3.16, 2.46); // gutter
+      box(1.3, 2.2, 0.08, trim, -2, 1.1, 2.0);
+      box(1.1, 2.1, 0.1, mat('#7a4b2a'), -2, 1.05, 2.02);
+      box(0.07, 0.07, 0.1, mat('#d4af37', { metalness: 0.8, roughness: 0.3 }), -1.62, 1.0, 2.1); // door handle
+      box(1.6, 0.14, 0.5, concrete, -2, 0.07, 2.3); // step
+      for (const x of [-4.6, 0.4]) win(1.5, 1.2, x, 1.9, 2.02, windowMat);
+      box(0.1, 1.1, 1.2, windowMat, 2.02, 2.1, -0.7);
+      box(0.25, 0.5, 0.4, mat('#e8e8e8'), 2.12, 1.5, 0.7); // meter cupboard
+    }
     blob(10.5, 8.5, -2, -1, scene, 0.01);
 
     // Bushes beside the path, a hedge along the back and side of the lot, a lamp at the road
-    const leaf = mat('#4c9a52', { flatShading: true });
-    const bush = new THREE.IcosahedronGeometry(0.42, 1);
-    many(bush, leaf, [[-3.2, 0.3, 4.4, 0.8], [-0.8, 0.3, 4.4, 0.8], [-3.2, 0.25, 6.6, 0.8], [-0.8, 0.25, 6.6, 0.8], [8.3, 0.35, -3, 1.2], [8.7, 0.28, -2.1, 0.9]]);
-    const hedge = mat('#356f3f');
-    cast(box(25, 0.8, 0.5, hedge, 0, 0.4, -10.6));
-    cast(box(0.5, 0.8, 16, hedge, -12.6, 0.4, -2.6));
-    lamp(-12.5, 7.8, 0);
+    if (!kit) {
+      const leaf = mat('#4c9a52', { flatShading: true });
+      const bush = new THREE.IcosahedronGeometry(0.42, 1);
+      many(bush, leaf, [[-3.2, 0.3, 4.4, 0.8], [-0.8, 0.3, 4.4, 0.8], [-3.2, 0.25, 6.6, 0.8], [-0.8, 0.25, 6.6, 0.8], [8.3, 0.35, -3, 1.2], [8.7, 0.28, -2.1, 0.9]]);
+      const hedge = mat('#356f3f');
+      cast(box(25, 0.8, 0.5, hedge, 0, 0.4, -10.6));
+      cast(box(0.5, 0.8, 16, hedge, -12.6, 0.4, -2.6));
+      lamp(-12.5, 7.8, 0);
+    }
 
     // Solar panels on the south roof slope, 0.45 kWp each
     panelGroup.position.set(-2, 3.2, 2.4);
@@ -236,35 +255,37 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
     box(34, 0.1, 0.12, mat('#9a968c'), 0, 0.05, 4.02); // curb
 
     // The user's house: brick, x -3..3, z -6..2, flat roof with a dark edge
-    const brick = paint(128, grid('#b8674a', '#d8c7b4', 4, 16, 0.5), 6 / 1.6, 6.4 / 1.6);
-    cast(receive(box(6, 6.4, 8, mat('#ffffff', { map: brick }), 0, 3.2, -2)));
-    receive(box(6.2, 0.25, 8.2, mat('#4a4d52'), 0, 6.5, -2));
-    box(6.2, 0.22, 0.2, trim, 0, 6.2, 2.06); // cornice under the roof edge
-    box(6.05, 0.4, 0.12, mat('#5d4038'), 0, 0.2, 2.03); // dark plinth
-    box(1.3, 2.25, 0.08, trim, -1.6, 1.12, 2.0);
-    box(1.1, 2.1, 0.1, mat('#2f4a3a'), -1.6, 1.05, 2.02);
-    box(0.07, 0.07, 0.1, mat('#d4af37', { metalness: 0.8, roughness: 0.3 }), -1.22, 1.0, 2.1);
-    box(1.5, 0.16, 0.45, mat('#bdb6a8'), -1.6, 0.08, 2.25); // stoop
-    win(1.5, 1.2, 1.1, 2.2, 2.02, windowMat);
-    for (const y of [3.9, 5.4]) for (const x of [-1.4, 1.4]) win(1.4, 1.1, x, y, 2.02, windowMat);
-    box(0.3, 0.45, 0.12, mat('#e8e8e8'), 0.4, 1.3, 2.05); // meter box
-    // A facade garden: a narrow strip of plants against the wall, very Dutch
-    box(0.6, 0.12, 0.4, mat('#6b5846'), -2.6, 0.12, 2.2);
-    many(new THREE.IcosahedronGeometry(0.28, 0), mat('#4a9a4f', { flatShading: true }), [[-2.75, 0.32, 2.2, 0.8], [-2.45, 0.38, 2.2], [-2.6, 0.7, 2.16, 0.7]]);
-    blob(34, 1.2, 0, 2.1, scene, 0.09); // shade along the foot of the facades
-    // Bollards along the curb and a lamp, like a canal street
-    many(new THREE.CylinderGeometry(0.1, 0.12, 0.8, 8), mat('#5b2a24', { roughness: 0.5 }), [-15, -12, -9, 8.5, 11.5, 14.5].map((x) => [x, 0.48, 3.75]));
-    lamp(-10.5, 3.6, 0);
+    if (!kit) {
+      const brick = paint(128, grid('#b8674a', '#d8c7b4', 4, 16, 0.5), 6 / 1.6, 6.4 / 1.6);
+      cast(receive(box(6, 6.4, 8, mat('#ffffff', { map: brick }), 0, 3.2, -2)));
+      receive(box(6.2, 0.25, 8.2, mat('#4a4d52'), 0, 6.5, -2));
+      box(6.2, 0.22, 0.2, trim, 0, 6.2, 2.06); // cornice under the roof edge
+      box(6.05, 0.4, 0.12, mat('#5d4038'), 0, 0.2, 2.03); // dark plinth
+      box(1.3, 2.25, 0.08, trim, -1.6, 1.12, 2.0);
+      box(1.1, 2.1, 0.1, mat('#2f4a3a'), -1.6, 1.05, 2.02);
+      box(0.07, 0.07, 0.1, mat('#d4af37', { metalness: 0.8, roughness: 0.3 }), -1.22, 1.0, 2.1);
+      box(1.5, 0.16, 0.45, mat('#bdb6a8'), -1.6, 0.08, 2.25); // stoop
+      win(1.5, 1.2, 1.1, 2.2, 2.02, windowMat);
+      for (const y of [3.9, 5.4]) for (const x of [-1.4, 1.4]) win(1.4, 1.1, x, y, 2.02, windowMat);
+      box(0.3, 0.45, 0.12, mat('#e8e8e8'), 0.4, 1.3, 2.05); // meter box
+      // A facade garden: a narrow strip of plants against the wall, very Dutch
+      box(0.6, 0.12, 0.4, mat('#6b5846'), -2.6, 0.12, 2.2);
+      many(new THREE.IcosahedronGeometry(0.28, 0), mat('#4a9a4f', { flatShading: true }), [[-2.75, 0.32, 2.2, 0.8], [-2.45, 0.38, 2.2], [-2.6, 0.7, 2.16, 0.7]]);
+      // Bollards along the curb and a lamp, like a canal street
+      many(new THREE.CylinderGeometry(0.1, 0.12, 0.8, 8), mat('#5b2a24', { roughness: 0.5 }), [-15, -12, -9, 8.5, 11.5, 14.5].map((x) => [x, 0.48, 3.75]));
+      lamp(-10.5, 3.6, 0);
 
-    // Grey neighbours on both sides, flat roofs at different heights
-    const greyWall = mat('#c4c6c9'), greyEdge = mat('#8d9094'), greyGlass = mat('#9aa3ad', { roughness: 0.4 });
-    for (const [cx, h] of [[-6, 5.6], [-12, 7], [6, 6.9], [12, 5.8]]) {
-      cast(receive(box(6, h, 8, greyWall, cx, h / 2, -2)));
-      box(6, 0.2, 8.1, greyEdge, cx, h + 0.05, -2);
-      box(1.1, 2.1, 0.1, greyEdge, cx - 1.6, 1.05, 2.02);
-      for (let y = 2.2; y < h - 0.8; y += 1.6) for (const x of [-1.4, 1.4]) if (y > 3 || x > 0) box(1.4, 1.1, 0.1, greyGlass, cx + x, y, 2.02);
+      // Grey neighbours on both sides, flat roofs at different heights
+      const greyWall = mat('#c4c6c9'), greyEdge = mat('#8d9094'), greyGlass = mat('#9aa3ad', { roughness: 0.4 });
+      for (const [cx, h] of [[-6, 5.6], [-12, 7], [6, 6.9], [12, 5.8]]) {
+        cast(receive(box(6, h, 8, greyWall, cx, h / 2, -2)));
+        box(6, 0.2, 8.1, greyEdge, cx, h + 0.05, -2);
+        box(1.1, 2.1, 0.1, greyEdge, cx - 1.6, 1.05, 2.02);
+        for (let y = 2.2; y < h - 0.8; y += 1.6) for (const x of [-1.4, 1.4]) if (y > 3 || x > 0) box(1.4, 1.1, 0.1, greyGlass, cx + x, y, 2.02);
+      }
+      box(0.8, 1, 0.5, mat('#8b9199'), -5, 0.5, 3.6); // street cabinet for the grid connection
     }
-    box(0.8, 1, 0.5, mat('#8b9199'), -5, 0.5, 3.6); // street cabinet for the grid connection
+    blob(34, 1.2, 0, 2.1, scene, 0.09); // shade along the foot of the facades
 
     // Panels in tilted rows on the flat roof, facing the street
     panelGroup.position.set(0, 6.75, 0);
@@ -286,49 +307,62 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
   battery.position.set(L.batt.at[0], 0, L.batt.at[1]);
   battery.rotation.y = L.batt.turn; // the LEDs face +x locally
   scene.add(battery);
-  cast(box(0.5, 1.6, 1.1, white, 0, 0.8, 0, battery));
-  box(0.54, 0.08, 1.14, mat('#3a3f47'), 0, 0.04, 0, battery); // feet
-  box(0.54, 0.06, 1.14, mat('#c9cfd6'), 0, 1.6, 0, battery); // lid
+  const battKit = part('battery');
+  if (battKit) battery.add(battKit);
+  else {
+    cast(box(0.5, 1.6, 1.1, white, 0, 0.8, 0, battery));
+    box(0.54, 0.08, 1.14, mat('#3a3f47'), 0, 0.04, 0, battery); // feet
+    box(0.54, 0.06, 1.14, mat('#c9cfd6'), 0, 1.6, 0, battery); // lid
+  }
   blob(1.2, 1.8, 0, 0, battery);
   const leds = [0, 1, 2, 3, 4].map((i) =>
     box(0.04, 0.18, 0.7, new THREE.MeshBasicMaterial({ color: '#333' }), 0.27, 0.35 + i * 0.26, 0, battery));
 
   // Charger post and car
   const [chx, chz] = L.charger;
-  box(0.25, 1.2, 0.25, white, chx, 0.6, chz);
+  const chargerKit = part('charger');
+  if (chargerKit) { chargerKit.position.set(chx, 0, chz); scene.add(chargerKit); }
+  else {
+    box(0.25, 1.2, 0.25, white, chx, 0.6, chz);
+    box(0.4, 0.06, 0.4, mat('#3a3f47'), chx, 0.03, chz); // base plate
+  }
   const chargerLed = box(0.27, 0.08, 0.27, new THREE.MeshBasicMaterial({ color: '#444' }), chx, 1.1, chz);
-  box(0.4, 0.06, 0.4, mat('#3a3f47'), chx, 0.03, chz); // base plate
   blob(0.9, 0.9, chx, chz);
   const car = new THREE.Group();
   scene.add(car);
-  cast(box(1.9, 0.65, 4.4, mat('#f4f5f7', { roughness: 0.3, metalness: 0.3 }), 0, 0.7, 0, car));
-  cast(box(1.7, 0.6, 2.5, mat('#1b2330', { roughness: 0.15 }), 0, 1.3, -0.3, car));
-  box(1.94, 0.14, 4.44, mat('#2a2d33'), 0, 0.42, 0, car); // dark sill and bumpers
-  const wheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.25, 16).rotateZ(Math.PI / 2);
-  const hubGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.27, 12).rotateZ(Math.PI / 2);
-  const tyre = mat('#16181c'), hub = mat('#b9bec6', { metalness: 0.7, roughness: 0.35 });
-  for (const [x, z] of [[-0.9, 1.4], [0.9, 1.4], [-0.9, -1.4], [0.9, -1.4]]) { add(wheelGeo, tyre, x, 0.36, z, car); add(hubGeo, hub, x, 0.36, z, car); }
-  const tailMat = new THREE.MeshBasicMaterial({ color: '#b3261e' });
-  for (const x of [-0.7, 0.7]) box(0.35, 0.12, 0.05, tailMat, x, 0.85, -2.2, car);
-  for (const x of [-0.65, 0.65]) box(0.4, 0.12, 0.05, lampMat, x, 0.85, 2.2, car); // headlights glow with the street lamps
+  const carKit = part('car');
+  if (carKit) car.add(carKit);
+  else {
+    cast(box(1.9, 0.65, 4.4, mat('#f4f5f7', { roughness: 0.3, metalness: 0.3 }), 0, 0.7, 0, car));
+    cast(box(1.7, 0.6, 2.5, mat('#1b2330', { roughness: 0.15 }), 0, 1.3, -0.3, car));
+    box(1.94, 0.14, 4.44, mat('#2a2d33'), 0, 0.42, 0, car); // dark sill and bumpers
+    const wheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.25, 16).rotateZ(Math.PI / 2);
+    const hubGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.27, 12).rotateZ(Math.PI / 2);
+    const tyre = mat('#16181c'), hub = mat('#b9bec6', { metalness: 0.7, roughness: 0.35 });
+    for (const [x, z] of [[-0.9, 1.4], [0.9, 1.4], [-0.9, -1.4], [0.9, -1.4]]) { add(wheelGeo, tyre, x, 0.36, z, car); add(hubGeo, hub, x, 0.36, z, car); }
+    const tailMat = new THREE.MeshBasicMaterial({ color: '#b3261e' });
+    for (const x of [-0.7, 0.7]) box(0.35, 0.12, 0.05, tailMat, x, 0.85, -2.2, car);
+    for (const x of [-0.65, 0.65]) box(0.4, 0.12, 0.05, lampMat, x, 0.85, 2.2, car); // headlights glow with the street lamps
+  }
   blob(2.6, 5.2, 0, 0, car);
 
   // Grid pole
-  if (!row) {
+  if (!row) blob(1.2, 1.2, -9, 7.2);
+  if (!row && !kit) {
     const wood = mat('#6b5846');
     cast(box(0.3, 6, 0.3, wood, -9, 3, 7.2));
     cast(box(2.4, 0.2, 0.2, wood, -9, 5.4, 7.2));
     many(new THREE.CylinderGeometry(0.07, 0.09, 0.25, 8), mat('#dfe6ea', { roughness: 0.3 }), [-10, -9.4, -8.6, -8].map((x) => [x, 5.62, 7.2])); // insulators
-    blob(1.2, 1.2, -9, 7.2);
     box(0.9, 1, 0.7, mat('#8b9199'), -9, 0.5, 6.5);
   }
 
   // Trees
-  const coneMat = mat('#3f8f4f', { flatShading: true });
   const bark = mat('#6b4a2f');
   for (const [x, z, s] of row ? [[-10, -9, 1.2], [9, -9.5, 1.3]] : [[-10, -6, 1.2], [-8.5, -1, 0.9], [9.5, -7, 1.3], [10.5, 4, 1]]) {
-    cast(add(new THREE.CylinderGeometry(0.2 * s, 0.26 * s, 1.4 * s, 8), bark, x, 0.7 * s, z));
-    cast(add(new THREE.ConeGeometry(1.3 * s, 2.8 * s, 8), coneMat, x, 2.6 * s, z));
+    if (!kit) {
+      cast(add(new THREE.CylinderGeometry(0.2 * s, 0.26 * s, 1.4 * s, 8), bark, x, 0.7 * s, z));
+      cast(add(new THREE.ConeGeometry(1.3 * s, 2.8 * s, 8), coneMat, x, 2.6 * s, z));
+    }
     blob(3 * s, 3 * s, x, z, scene, 0.02);
   }
 

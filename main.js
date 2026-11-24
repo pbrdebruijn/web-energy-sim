@@ -1,5 +1,6 @@
 import { simulate, daylight, SAMPLE, N, DT } from './sim.js';
 import { createScene, COLORS } from './scene.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createChart, renderLabels, UI_CSS, hhmm, eur, kwh, pct, dot, totalsHtml, totalsToggle } from './ui.js';
 
 document.head.append(Object.assign(document.createElement('style'), { textContent: UI_CSS }));
@@ -278,11 +279,13 @@ $('closeSettings').onclick = () => togglePanel('settings', false);
 const now = new Date();
 let t = now.getHours() + now.getMinutes() / 60, playing = true, speed = 1, last = performance.now(), labelKey = '';
 let scene;
+// Detailed models made in Blender (npm run assets); if they fail to load the scene falls back to simple shapes
+const model = await new GLTFLoader().loadAsync('assets/scene.glb').then((g) => g.scene, () => null);
 // The house type changes the whole layout, so the scene is built again for it
 function buildScene() {
   if (popKey) closePop();
   scene?.dispose();
-  scene = createScene($('stage'), { house: cfg.house });
+  scene = createScene($('stage'), { house: cfg.house, model });
   labelKey = '';
   for (const [key, el] of Object.entries(scene.labels)) {
     el.tabIndex = 0;
