@@ -12,17 +12,26 @@ const SEASON_OF = ['winter', 'winter', 'spring', 'spring', 'spring', 'summer', '
 const MAX_FALL = 320;
 const rand = (a, b) => a + Math.random() * (b - a);
 
-export function createSeasons({ scene, add, box, mat, grassMat, coneMat, row = false }) {
+// part and geo hand out detailed models from Blender when the website has them; the card draws simple shapes
+export function createSeasons({ scene, add, box, mat, grassMat, coneMat, row = false, part = () => null, geo = () => null }) {
   // Two leafy trees whose crowns change most with the seasons
   const bark = mat('#6b4a2f');
   // In a row they stand as street trees on the sidewalk
   const crowns = (row ? [[-9.5, 3.5, 0.9], [9.2, 3.5, 0.9]] : [[-11.3, 3.4, 1], [10.8, -1.8, 1.15]]).map(([x, z, s]) => {
-    add(new THREE.CylinderGeometry(0.18 * s, 0.24 * s, 2 * s, 8), bark, x, s, z).castShadow = true;
-    for (const [ry, rz] of [[0, 0.7], [2.1, 0.6], [4.2, 0.8], [1, -0.1]]) { // bare branches, hidden by the crown when in leaf
-      const b = add(new THREE.CylinderGeometry(0.04 * s, 0.08 * s, 1.5 * s, 6).translate(0, 0.75 * s, 0), bark, x, 1.8 * s, z);
-      b.rotation.set(0, ry, rz);
+    const trunk = geo('tree_bark'), leaves = geo('crown_leaf');
+    if (trunk) {
+      const t = add(trunk, bark, x, 0, z);
+      t.scale.setScalar(s);
+      t.castShadow = true;
+    } else {
+      add(new THREE.CylinderGeometry(0.18 * s, 0.24 * s, 2 * s, 8), bark, x, s, z).castShadow = true;
+      for (const [ry, rz] of [[0, 0.7], [2.1, 0.6], [4.2, 0.8], [1, -0.1]]) { // bare branches, hidden by the crown when in leaf
+        const b = add(new THREE.CylinderGeometry(0.04 * s, 0.08 * s, 1.5 * s, 6).translate(0, 0.75 * s, 0), bark, x, 1.8 * s, z);
+        b.rotation.set(0, ry, rz);
+      }
     }
-    const crown = add(new THREE.IcosahedronGeometry(1.3 * s, 1), mat('#3f8f3a', { flatShading: true }), x, 2.6 * s, z);
+    const crown = add(leaves ?? new THREE.IcosahedronGeometry(1.3 * s, 1), mat('#3f8f3a', { flatShading: !leaves }), x, 2.6 * s, z);
+    if (leaves) crown.scale.setScalar(s);
     crown.castShadow = true;
     return crown;
   });
@@ -91,14 +100,18 @@ export function createSeasons({ scene, add, box, mat, grassMat, coneMat, row = f
   // Snowman in winter, pumpkin by the door in October
   const snowman = new THREE.Group();
   const snow = mat('#f7f9fb');
-  for (const [r, y] of [[0.55, 0.5], [0.4, 1.25], [0.28, 1.8]]) add(new THREE.SphereGeometry(r, 16, 12), snow, 0, y, 0, snowman);
-  add(new THREE.ConeGeometry(0.06, 0.3, 8).rotateX(Math.PI / 2), mat('#e67e22'), 0, 1.8, 0.38, snowman);
-  box(0.36, 0.3, 0.36, dark, 0, 2.15, 0, snowman);
-  for (const x of [-0.1, 0.1]) box(0.05, 0.05, 0.02, dark, x, 1.88, 0.26, snowman);
+  const snowKit = part('snowman');
+  if (snowKit) snowman.add(snowKit);
+  else {
+    for (const [r, y] of [[0.55, 0.5], [0.4, 1.25], [0.28, 1.8]]) add(new THREE.SphereGeometry(r, 16, 12), snow, 0, y, 0, snowman);
+    add(new THREE.ConeGeometry(0.06, 0.3, 8).rotateX(Math.PI / 2), mat('#e67e22'), 0, 1.8, 0.38, snowman);
+    box(0.36, 0.3, 0.36, dark, 0, 2.15, 0, snowman);
+    for (const x of [-0.1, 0.1]) box(0.05, 0.05, 0.02, dark, x, 1.88, 0.26, snowman);
+  }
   snowman.position.set(...(row ? [-7.2, 0, 3] : [-4.6, 0, 5]));
   scene.add(snowman);
   casters(snowman);
-  const pumpkin = add(new THREE.SphereGeometry(0.32, 14, 10).scale(1, 0.75, 1), mat('#e67e22', { emissive: '#ff8c00', emissiveIntensity: 0 }), -1.05, 0.24, 2.6);
+  const pumpkin = add(geo('pumpkin_pumpkin_orange') ?? new THREE.SphereGeometry(0.32, 14, 10).scale(1, 0.75, 1), mat('#e67e22', { emissive: '#ff8c00', emissiveIntensity: 0 }), -1.05, 0.24, 2.6);
   box(0.06, 0.14, 0.06, mat('#4e6b2f'), 0, 0.27, 0, pumpkin);
 
   let month = -1, season;

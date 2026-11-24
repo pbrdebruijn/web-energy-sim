@@ -195,6 +195,7 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
     });
     return g ?? null;
   };
+  const geo = (name) => model?.getObjectByName(name)?.geometry ?? null; // shape only, for parts that keep their own material
   const kit = part(row ? 'terraced' : 'detached');
   if (kit) scene.add(kit);
   const panels = new THREE.InstancedMesh(new THREE.BoxGeometry(0.88, 1.12, 0.06), panelMat, panelCount);
@@ -300,6 +301,14 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
   box(0.5, 0.25, 0.5, mat('#3a3f47'), ...HUB);
   Object.assign(panels, { frustumCulled: false }); // bounds would be cached at count 0
   panelGroup.add(panels);
+  // Aluminium frames and rails from the model, placed like the panels
+  const frameGeo = geo('panel_metal');
+  const frames = frameGeo && new THREE.InstancedMesh(frameGeo, mat('#c8ccd2', { roughness: 0.4, metalness: 0.2 }), panelCount);
+  if (frames) {
+    frames.instanceMatrix.array.set(panels.instanceMatrix.array);
+    frames.frustumCulled = false;
+    panelGroup.add(frames);
+  }
 
   // Home battery with five charge LEDs
   const white = mat('#e9edf2');
@@ -458,7 +467,7 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
   observer.observe(container);
   resize();
 
-  const seasons = createSeasons({ scene, add, box, mat, grassMat, coneMat, row });
+  const seasons = createSeasons({ scene, add, box, mat, grassMat, coneMat, row, part, geo });
 
   const NIGHT = new THREE.Color('#0b1026'), DAY = new THREE.Color('#8ecae6'), DUSK = new THREE.Color('#f79d5c'), GREY = new THREE.Color('#aab4bd');
   const tmp = V(0, 0, 0);
@@ -490,6 +499,7 @@ export function createScene(container, { maxPixelRatio = 2, devices = [], shadow
     lampMat.emissiveIntensity = (1 - day) * 1.6;
     panelMat.emissiveIntensity = s.kWp ? 0.5 * (s.solar / s.kWp) : 0;
     panels.count = THREE.MathUtils.clamp(Math.round(s.kWp / 0.45), 0, panelCount);
+    if (frames) frames.count = panels.count;
     leds.forEach((l, i) => l.material.color.set(!s.battOn ? '#333' : s.battSoc > i / 5 + 0.02 ? COLORS.batt : '#333'));
 
     const ease = s.evAway * s.evAway * (3 - 2 * s.evAway);

@@ -86,8 +86,8 @@ def ball(part, m, r, x, y, z, sub=1, sy=1.0, jitter=0.0, **rot):
     put(part, m, tmp, place(x, y, z, **rot))
 
 
-def prism(part, m, pts, width, x, y, z, bevel=0.0, seg=1, **rot):
-    """Side profile pts as (z, y), extruded along x by width."""
+def prism(part, m, pts, width, x, y, z, bevel=0.0, seg=1, taper=None, **rot):
+    """Side profile pts as (z, y), extruded along x by width. taper=(y0, y1, k) narrows it by k at height y1."""
     tmp = bmesh.new()
     vs = [tmp.verts.new((-width / 2, py, pz)) for pz, py in pts]
     f = tmp.faces.new(vs)
@@ -96,7 +96,39 @@ def prism(part, m, pts, width, x, y, z, bevel=0.0, seg=1, **rot):
     bmesh.ops.recalc_face_normals(tmp, faces=tmp.faces)
     if bevel:
         bmesh.ops.bevel(tmp, geom=list(tmp.edges), offset=bevel, segments=seg, affect='EDGES', profile=0.5, clamp_overlap=True)
+    if taper:
+        y0, y1, k = taper
+        for v in tmp.verts:
+            v.co.x *= 1 - k * max(0.0, min(1.0, (v.co.y - y0) / (y1 - y0)))
     put(part, m, tmp, place(x, y, z, **rot))
+
+
+def torus(part, m, R, r, x, y, z, seg=24, ring=6, **rot):  # ring in the local xy plane
+    tmp = bmesh.new()
+    vs = [[tmp.verts.new(((R + r * math.cos(b)) * math.cos(a), (R + r * math.cos(b)) * math.sin(a), r * math.sin(b)))
+           for b in (2 * math.pi * j / ring for j in range(ring))] for a in (2 * math.pi * i / seg for i in range(seg))]
+    for i in range(seg):
+        for j in range(ring):
+            tmp.faces.new((vs[i][j], vs[(i + 1) % seg][j], vs[(i + 1) % seg][(j + 1) % ring], vs[i][(j + 1) % ring]))
+    bmesh.ops.recalc_face_normals(tmp, faces=tmp.faces)
+    put(part, m, tmp, place(x, y, z, **rot))
+
+
+def rod(part, m, a, b, r, seg=6):  # thin tube from point a to point b
+    a, b = Vector(a), Vector(b)
+    tmp = bmesh.new()
+    bmesh.ops.create_cone(tmp, cap_ends=True, segments=seg, radius1=r, radius2=r, depth=(b - a).length)
+    q = (b - a).to_track_quat('Z', 'Y')
+    put(part, m, tmp, Matrix.Translation((a + b) / 2) @ q.to_matrix().to_4x4())
+
+
+def bins(part, x, z, colours):  # Dutch wheelie bins
+    for k, c in enumerate(colours):
+        bx = x + k * 0.7
+        box(part, mat(f'bin_{c}', c, 0.6), 0.58, 1.0, 0.7, bx, 0.55, z, bevel=0.05, seg=2)
+        box(part, mat(f'bin_{c}', c, 0.6), 0.64, 0.06, 0.76, bx, 1.08, z + 0.02, bevel=0.02)
+        for sx in (-1, 1):
+            cyl(part, mat('tyre', '#16181c', 0.9), 0.09, 0.09, 0.06, bx + sx * 0.25, 0.09, z - 0.3, seg=10, rz=math.pi / 2)
 
 
 # Shared colours (sRGB, as in scene.js)
@@ -221,6 +253,18 @@ box(P, HEDGE, 0.55, 0.85, 16, -12.6, 0.42, -2.6, bevel=0.18, seg=3)
 for x, z, s in ((-10, -6, 1.2), (-8.5, -1, 0.9), (9.5, -7, 1.3), (10.5, 4, 1)):
     pine(P, x, z, s)
 lamp_post(P, -12.5, 7.8)
+bins(P, 8.3, 7.0, ['#2e7d32', '#6d7378'])  # green and grey bins by the driveway
+MAILBOX = mat('mailbox', '#2b2f36', 0.5, 0.2)
+cyl(P, MAILBOX, 0.04, 0.04, 1.0, -3.15, 0.5, 7.7, seg=8)
+box(P, MAILBOX, 0.3, 0.35, 0.45, -3.15, 1.12, 7.7, bevel=0.05, seg=2)
+box(P, GOLD, 0.2, 0.02, 0.01, -3.15, 1.2, 7.93)
+BENCH = mat('bench_wood', '#8a6a4a', 0.85)
+for k in range(3):  # garden bench by the back hedge
+    box(P, BENCH, 1.6, 0.05, 0.12, -4, 0.45, -9.75 + k * 0.15, bevel=0.01)
+    box(P, BENCH, 1.6, 0.12, 0.04, -4, 0.62 + k * 0.15, -10.05, bevel=0.01)
+for sx in (-0.7, 0.7):
+    box(P, DARK, 0.05, 0.45, 0.4, -4 + sx, 0.22, -9.6)
+cyl(P, mat('manhole', '#4b4f55', 0.6, 0.2), 0.35, 0.35, 0.02, 2.0, 0.07, 9.5, seg=20)
 # Grid pole with a crossarm, braces, insulators and a connection box
 WOOD = mat('pole_wood', '#6b5846', 0.95)
 cyl(P, WOOD, 0.17, 0.12, 6, -9, 3, 7.2, seg=10)
@@ -305,24 +349,60 @@ for x in (-15, -12, -9, 8.5, 11.5, 14.5):  # canal-street bollards
     ball(P, OXBLOOD, 0.1, x, 0.83, 3.75, sub=2)
 lamp_post(P, -10.5, 3.6)
 cabinet(P, -5, 3.6)
+# A Dutch bike leaning on the neighbour's wall, bins and street furniture
+BIKE = mat('bike_frame', '#1d1f22', 0.5)
+bx, bz = 8.3, 2.45
+for wx in (-0.52, 0.52):
+    torus(P, mat('tyre', '#16181c', 0.9), 0.33, 0.028, bx + wx, 0.36, bz)
+    for k in range(6):
+        rod(P, METAL, (bx + wx, 0.36, bz), (bx + wx + 0.3 * math.cos(k * math.pi / 3), 0.36 + 0.3 * math.sin(k * math.pi / 3), bz), 0.006, seg=4)
+A, B, C, D, E, F = ((bx - 0.52, 0.36, bz), (bx + 0.52, 0.36, bz), (bx - 0.05, 0.3, bz), (bx - 0.22, 0.86, bz), (bx + 0.36, 0.92, bz), (bx + 0.42, 0.62, bz))
+for a, b in ((A, C), (A, D), (C, D), (D, E), (C, F), (F, B), (E, F)):
+    rod(P, BIKE, a, b, 0.022)
+box(P, mat('saddle', '#5a3b22', 0.7), 0.24, 0.05, 0.12, bx - 0.24, 0.93, bz, bevel=0.02)
+rod(P, BIKE, (bx + 0.34, 1.0, bz - 0.28), (bx + 0.34, 1.0, bz + 0.28), 0.015)
+box(P, BIKE, 0.42, 0.03, 0.16, bx - 0.5, 0.72, bz)  # rear rack
+rod(P, BIKE, (bx - 0.7, 0.72, bz), (bx - 0.52, 0.36, bz), 0.012)
+bins(P, 13.5, 2.55, ['#6d7378', '#2e7d32'])
+for x in (-6.5, 6.5):  # drain grates by the curb
+    box(P, mat('grate', '#3b3f45', 0.5, 0.3), 0.6, 0.02, 0.3, x, 0.065, 4.3)
+cyl(P, mat('manhole', '#4b4f55', 0.6, 0.2), 0.35, 0.35, 0.02, 1.5, 0.065, 7.3, seg=20)
+SIGN = mat('sign_pole', '#9aa1a9', 0.5, 0.1)
+cyl(P, SIGN, 0.04, 0.04, 2.4, 15.8, 1.2, 3.8, seg=8)
+box(P, mat('sign_blue', '#1f5fa8', 0.5), 0.5, 0.5, 0.03, 15.8, 2.3, 3.82, bevel=0.03, seg=2)
+box(P, TRIM, 0.2, 0.3, 0.01, 15.8, 2.3, 3.84)
 
-# ---------- Car: own origin, front +z, as in scene.js ----------
+# ---------- Car: an electric crossover with its own origin, front +z, wheels at z +-1.4 as scene.js expects ----------
 P = 'car'
-BODY = mat('car_body', '#f4f5f7', 0.3, 0.3)
-prism(P, BODY, [(-2.25, 0.32), (2.25, 0.32), (2.3, 0.62), (2.15, 0.92), (1.0, 1.06), (-1.9, 1.08), (-2.25, 0.98)], 1.86, 0, 0, 0, bevel=0.06, seg=2)
-prism(P, mat('car_glass', '#1b2330', 0.12), [(1.0, 1.04), (0.3, 1.52), (-1.2, 1.56), (-1.88, 1.24), (-1.9, 1.06)], 1.7, 0, 0, 0, bevel=0.05, seg=2)
-box(P, mat('car_trim', '#2a2d33', 0.5), 1.9, 0.16, 4.5, 0, 0.4, 0, bevel=0.05, seg=2)
+BODY = mat('car_body', '#f4f5f7', 0.25, 0.2)
+CTRIM = mat('car_trim', '#2a2d33', 0.5)
+# Smooth closed nose (no grille), long glass cabin, short sloping tail
+prism(P, BODY, [(-2.3, 0.3), (2.25, 0.3), (2.36, 0.48), (2.36, 0.66), (2.22, 0.82), (1.85, 0.92), (1.15, 1.0), (-1.9, 1.04),
+                (-2.28, 0.98), (-2.36, 0.78), (-2.34, 0.5)], 1.9, 0, 0, 0, bevel=0.1, seg=3)
+prism(P, mat('car_glass', '#1b2330', 0.08), [(1.25, 0.98), (0.2, 1.54), (-0.9, 1.6), (-1.65, 1.46), (-2.2, 1.04)], 1.8, 0, 0, 0,
+      bevel=0.16, seg=4, taper=(1.0, 1.6, 0.22))  # glass cabin that narrows to the roof
+box(P, CTRIM, 1.86, 0.04, 3.2, 0, 1.03, -0.45, bevel=0.02)  # black window line
+box(P, CTRIM, 1.94, 0.2, 4.62, 0, 0.4, 0, bevel=0.08, seg=2)  # black cladding around the bottom
+box(P, CTRIM, 1.2, 0.08, 0.05, 0, 0.5, 2.36, bevel=0.02)  # small lower air intake
+box(P, CTRIM, 1.7, 0.1, 0.04, 0, 0.79, 2.3, bevel=0.02)  # dark band so the light bar reads in daylight
+box(P, LAMP, 1.6, 0.035, 0.05, 0, 0.8, 2.31, bevel=0.015)  # front light bar
 for sx in (-1, 1):
-    box(P, BODY, 0.06, 0.1, 0.2, sx * 0.98, 1.08, 0.85, bevel=0.02)  # mirrors
-    box(P, mat('car_trim', '#2a2d33', 0.5), 0.012, 0.55, 0.01, sx * 0.935, 0.72, -0.15)  # door gap
+    box(P, LAMP, 0.3, 0.06, 0.05, sx * 0.66, 0.77, 2.32, bevel=0.02)
+box(P, mat('tail', '#b3261e', 0.4, 0, 2.0), 1.7, 0.06, 0.05, 0, 0.88, -2.34, bevel=0.02)  # rear light bar
+for sx in (-1, 1):
+    box(P, BODY, 0.1, 0.1, 0.22, sx * 1.0, 1.05, 1.0, bevel=0.04, seg=2)  # mirrors
+    box(P, CTRIM, 0.08, 0.04, 0.2, sx * 1.0, 1.0, 1.0)
+    for hz in (0.45, -0.75):
+        box(P, CTRIM, 0.01, 0.035, 0.22, sx * 0.957, 0.86, hz)  # flush door handles
+    box(P, CTRIM, 0.008, 0.6, 0.01, sx * 0.955, 0.68, -0.15)  # door gap
     for wz in (1.4, -1.4):
-        cyl(P, mat('tyre', '#16181c', 0.9), 0.36, 0.36, 0.25, sx * 0.9, 0.36, wz, seg=20, rz=math.pi / 2)
-        cyl(P, mat('rim', '#b9bec6', 0.35, 0.3), 0.22, 0.22, 0.27, sx * 0.9, 0.36, wz, seg=16, rz=math.pi / 2)
+        cyl(P, CTRIM, 0.46, 0.46, 0.02, sx * 0.956, 0.38, wz, seg=24, rz=math.pi / 2)  # wheel arch shadow
+        cyl(P, mat('tyre', '#16181c', 0.9), 0.37, 0.37, 0.26, sx * 0.88, 0.37, wz, seg=24, rz=math.pi / 2)
+        cyl(P, mat('rim', '#c4c8ce', 0.35, 0.2), 0.28, 0.28, 0.27, sx * 0.88, 0.37, wz, seg=20, rz=math.pi / 2)  # aero cover
+        cyl(P, CTRIM, 0.08, 0.08, 0.28, sx * 0.88, 0.37, wz, seg=12, rz=math.pi / 2)
         for k in range(5):
-            box(P, mat('rim_dark', '#4a4f57', 0.5), 0.02, 0.38, 0.05, sx * 1.03, 0.36, wz, rx=k * math.pi / 5)
-for sx in (-1, 1):
-    box(P, LAMP, 0.45, 0.07, 0.06, sx * 0.6, 0.84, 2.2, bevel=0.02)
-box(P, mat('tail', '#b3261e', 0.4, 0, 2.0), 1.6, 0.07, 0.05, 0, 0.88, -2.24)
+            a = k * 2 * math.pi / 5
+            box(P, CTRIM, 0.02, 0.12, 0.04, sx * 1.015, 0.37 + math.cos(a) * 0.19, wz + math.sin(a) * 0.19, rx=-a)
 
 # ---------- Battery: LEDs stay in scene.js on the +x face ----------
 P = 'battery'
@@ -340,7 +420,58 @@ box(P, DARK, 0.4, 0.06, 0.4, 0, 0.03, 0, bevel=0.02)
 box(P, mat('charger_face', '#2a2d33', 0.3), 0.16, 0.3, 0.02, 0, 0.8, 0.13, bevel=0.01)
 cyl(P, DARK, 0.06, 0.06, 0.18, 0, 0.55, 0.16, seg=10, rx=math.pi / 2)  # holster
 
+# ---------- Parts used as geometry by scene.js and season.js (they keep their own live materials) ----------
+P = 'panel'  # aluminium frame and rails around one 0.88 by 1.12 panel, facing +z
+for sx in (-1, 1):
+    box(P, METAL, 0.035, 1.16, 0.075, sx * 0.457, 0, 0.005)
+    box(P, METAL, 0.88, 0.035, 0.075, 0, sx * 0.577, 0.005)
+for sy in (-0.3, 0.3):
+    box(P, METAL, 0.84, 0.05, 0.04, 0, sy, -0.05)
+P = 'tree'  # trunk that forks into branches, scaled by the tree size
+cyl(P, BARK, 0.24, 0.17, 1.9, 0, 0.95, 0, seg=9)
+for k, (ry, tilt, ln) in enumerate(((0, 0.6, 1.3), (2.1, 0.55, 1.2), (4.2, 0.7, 1.1), (1.0, 0.2, 1.2), (3.2, 0.35, 1.0))):
+    base = Vector((0, 1.7 + 0.1 * (k % 2), 0))
+    tip = base + Vector((math.sin(tilt) * math.cos(ry), math.cos(tilt), math.sin(tilt) * math.sin(ry))) * ln
+    rod(P, BARK, base, tip, 0.07 - 0.01 * (k % 3), seg=6)
+    for t in (-0.6, 0.6):  # twigs
+        rod(P, BARK, tip, tip + Vector((math.cos(ry + t) * 0.35, 0.4, math.sin(ry + t) * 0.35)), 0.025, seg=4)
+P = 'crown'  # a cluster of leafy lumps, about 1.3 across like the old sphere
+for cx, cy, cz, r in ((0, 0.1, 0, 0.95), (0.6, -0.15, 0.25, 0.7), (-0.55, -0.1, 0.35, 0.7), (0.1, 0.55, -0.3, 0.7), (-0.2, -0.25, -0.6, 0.65),
+                      (0.45, 0.35, -0.5, 0.55), (-0.5, 0.45, 0.1, 0.55)):
+    ball(P, LEAF, r, cx, cy, cz, sub=2, jitter=0.12)
+P = 'snowman'
+SNOW = mat('snow', '#f7f9fb', 0.9)
+for r, y in ((0.55, 0.5), (0.4, 1.25), (0.28, 1.8)):
+    ball(P, SNOW, r, 0, y, 0, sub=2, jitter=0.03)
+COAL = mat('coal', '#1d1f22', 0.9)
+cyl(P, mat('carrot', '#e67e22', 0.7), 0.06, 0.0, 0.3, 0, 1.8, 0.38, seg=8, rx=math.pi / 2)
+for x in (-0.1, 0.1):
+    ball(P, COAL, 0.04, x, 1.9, 0.25, sub=1)
+for k in range(3):
+    ball(P, COAL, 0.045, 0, 1.15 + k * 0.15, 0.39 - abs(k - 1) * 0.02, sub=1)
+for k in range(5):  # smile
+    ball(P, COAL, 0.025, -0.1 + k * 0.05, 1.71 - 0.03 * (1 - abs(k - 2) / 2), 0.265, sub=1)
+SCARF = mat('scarf', '#c0392b', 0.8)
+torus(P, SCARF, 0.3, 0.07, 0, 1.5, 0, rx=math.pi / 2)
+box(P, SCARF, 0.12, 0.4, 0.05, 0.15, 1.35, 0.3, rz=0.15)
+cyl(P, COAL, 0.3, 0.3, 0.04, 0, 2.03, 0, seg=16)  # hat brim
+cyl(P, COAL, 0.19, 0.19, 0.32, 0, 2.2, 0, seg=16)
+cyl(P, mat('hat_band', '#8e2c22', 0.7), 0.195, 0.195, 0.06, 0, 2.08, 0, seg=16)
+for sx in (-1, 1):  # stick arms
+    rod(P, BARK, (sx * 0.35, 1.3, 0), (sx * 0.95, 1.65, 0.05), 0.025)
+    rod(P, BARK, (sx * 0.8, 1.56, 0.04), (sx * 0.95, 1.8, 0.0), 0.015)
+P = 'pumpkin'  # ribbed, about the size of the old sphere
+tmp = bmesh.new()
+bmesh.ops.create_uvsphere(tmp, u_segments=32, v_segments=14, radius=0.32)
+for v in tmp.verts:
+    ang = math.atan2(v.co.z, v.co.x)
+    v.co.x *= 1 - 0.07 * (0.5 + 0.5 * math.cos(ang * 10))
+    v.co.z *= 1 - 0.07 * (0.5 + 0.5 * math.cos(ang * 10))
+    v.co.y *= 0.75
+put(P, mat('pumpkin_orange', '#e67e22', 0.6), tmp, Matrix())
+
 # ---------- Turn the parts into objects and export ----------
+SMOOTH = {'car_body', 'car_glass', 'tyre', 'rim', 'snow', 'pumpkin_orange', 'bin_#2e7d32', 'bin_#6d7378'}
 TO_BLENDER = Matrix(((1, 0, 0, 0), (0, 0, -1, 0), (0, 1, 0, 0), (0, 0, 0, 1)))  # three (x, y, z) -> Blender (x, -z, y)
 for part, by_mat in PARTS.items():
     root = bpy.data.objects.new(part, None)
@@ -359,9 +490,16 @@ for part, by_mat in PARTS.items():
         bm.free()
         me.materials.append(MATS[m])
         ob = bpy.data.objects.new(f'{part}_{m}', me)
+        if m in SMOOTH:  # rounded parts: smooth normals, but keep creases sharper than 35 degrees
+            me.shade_smooth()
+            me.set_sharp_from_angle(angle=math.radians(35))
         bpy.context.scene.collection.objects.link(ob)
         ob.parent = root
 
 bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', export_yup=True, export_apply=False, export_cameras=False,
                           export_lights=False, export_animations=False, export_materials='EXPORT')
-print('EXPORTED', OUT, sum(len(o.data.polygons) for o in bpy.data.objects if o.type == 'MESH'), 'faces')
+faces = {}
+for o in bpy.data.objects:
+    if o.type == 'MESH':
+        faces[o.parent.name] = faces.get(o.parent.name, 0) + len(o.data.polygons)
+print('EXPORTED', OUT, faces)
