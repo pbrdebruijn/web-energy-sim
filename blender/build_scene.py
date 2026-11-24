@@ -1,4 +1,4 @@
-# Builds the detailed 3D parts of the website scene and exports them as one glTF file.
+# Builds the detailed 3D parts of the scene and exports them as one glTF file for the website and the card.
 # Run: npm run assets   (needs Blender 4.2 or newer; runs in the background and never touches an open file)
 #
 # All coordinates are written in three.js space (y up, the house front faces +z) so they match LAYOUTS in scene.js.

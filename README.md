@@ -87,7 +87,7 @@ Every sensor is optional. Sensors you leave out come from the Energy dashboard w
 | `height` | `420` | Height of the 3D scene in pixels. |
 | `chart` | `true` | Set to `false` to hide the chart of today. |
 | `cheapest_hours` | `3` | How many of the cheapest hours still to come the chart marks. `0` turns it off. |
-| `quality` | `high` | `low` turns off shadows, lowers sharpness and frame rate, for older tablets. |
+| `quality` | `high` | `high` shows the detailed 3D models from `energy-scene.glb`. `low` uses simple shapes, turns off shadows, lowers sharpness and frame rate, for older tablets. |
 | `tap_action`, `hold_action` | tap shows details | Standard Home Assistant actions for a tap or hold on any label, like `navigate` to the Energy dashboard. |
 | `actions` | none | Actions per label: `solar`, `home`, `grid`, `battery` or `ev`, each with its own `tap_action` and `hold_action`. For example a hold on the car that toggles the charger. |
 | `totals` | `true` | Set to `false` to remove today's totals. They only show when the Energy dashboard has energy meters. With totals on, a **Totals** button at the bottom right of the scene shows or hides them, and your browser remembers the choice. |

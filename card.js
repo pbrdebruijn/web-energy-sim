@@ -1,5 +1,6 @@
 // Home Assistant dashboard card: the 3D house shows what solar, grid, battery and EV do right now,
 // and the chart below shows today so far. Built into dist/energy-scene-card.js by `npm run build`.
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createScene } from './scene.js';
 import { daylight, N, DT } from './sim.js';
 import { createChart, renderLabels, UI_CSS, hhmm, esc, kwh, pct, fmt, tr, setLocale, totalsHtml, totalsToggle } from './ui.js';
@@ -9,6 +10,11 @@ const LABEL_ENTITY = { solar: 'solar', home: 'home', grid: 'grid', batt: 'batter
 const HISTORY_EVERY = 5 * 60e3, CHART_EVERY = 5e3, SCRUB_HOLD = 15e3;
 // 30 fps is smooth enough for a dashboard and halves the GPU work on 60 Hz screens; 2 ms slack absorbs vsync jitter
 const FRAME_MS = 1000 / 30 - 2;
+// Detailed models from Blender sit next to this file (HACS downloads every release asset). Until they load,
+// or if they are missing, the card draws simple shapes. Loaded once and shared by every card on the page.
+let model = null, modelLoad = null;
+const loadModel = () => (modelLoad ??= new GLTFLoader().loadAsync(new URL('energy-scene.glb', import.meta.url).href)
+  .then((g) => (model = g.scene), () => null));
 
 const CARD_CSS = `
 :host { display: block; --ink: var(--primary-text-color, #f0efec); --ink2: var(--secondary-text-color, #c3c2b7);
@@ -115,7 +121,10 @@ class EnergySceneCard extends HTMLElement {
     this.still = matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     this.frameMs = this.still ? 1000 : low ? 1000 / 20 - 2 : FRAME_MS;
     // Fill cost scales with pixel count, and 1.5 still looks sharp at card size
-    this.scene = createScene(q('.stage'), { maxPixelRatio: low ? 1 : 1.5, shadows: !low, devices: this.devices, house: this.config.house });
+    // Low quality keeps the simple shapes; high swaps in the detailed models once they have loaded
+    if (!low && !model) loadModel().then((m) => { if (m && this.scene && !this.detailed) { this.teardown(); this.setup(); } });
+    this.detailed = !low && !!model;
+    this.scene = createScene(q('.stage'), { maxPixelRatio: low ? 1 : 1.5, shadows: !low, devices: this.devices, house: this.config.house, model: this.detailed ? model : null });
     for (const [key, el] of Object.entries(this.scene.labels)) {
       const actionKey = LABEL_ENTITY[key], entityId = e[actionKey];
       if (!entityId && !actionFor(this.config, actionKey, 'tap')) continue;
@@ -362,7 +371,7 @@ const FIELDS = [
   ['cheapest_hours', 'Cheapest hours to mark', 'In the price chart, from now to the end of the day. 0 turns it off', { number: { min: 0, max: 24, step: 1, mode: 'box' } }],
   ['house', 'House type', 'Terraced: a flat-roofed town house between grey neighbours, car parked on the street', { select: { mode: 'dropdown', options: [{ value: 'detached', label: 'Detached' }, { value: 'terraced', label: 'Terraced, in a row' }] } }],
   ['effects', 'Show seasonal effects', 'Falling leaves or snow, birds, the jogger and dog, snowman and pumpkin', { boolean: {} }],
-  ['quality', 'Quality', 'Low drops shadows and sharpness, for older tablets', { select: { mode: 'dropdown', options: [{ value: 'high', label: 'High' }, { value: 'low', label: 'Low' }] } }],
+  ['quality', 'Quality', 'Low uses simple shapes without shadows and less sharpness, for older tablets', { select: { mode: 'dropdown', options: [{ value: 'high', label: 'High' }, { value: 'low', label: 'Low' }] } }],
   ['tap_action', 'Tap on a label', 'Default: show details and history', { ui_action: {} }],
   ['hold_action', 'Hold on a label', null, { ui_action: {} }],
 ];

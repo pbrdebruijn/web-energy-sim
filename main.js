@@ -280,7 +280,7 @@ const now = new Date();
 let t = now.getHours() + now.getMinutes() / 60, playing = true, speed = 1, last = performance.now(), labelKey = '';
 let scene;
 // Detailed models made in Blender (npm run assets); if they fail to load the scene falls back to simple shapes
-const model = await new GLTFLoader().loadAsync('assets/scene.glb').then((g) => g.scene, () => null);
+const model = await new GLTFLoader().loadAsync('dist/energy-scene.glb').then((g) => g.scene, () => null);
 // The house type changes the whole layout, so the scene is built again for it
 function buildScene() {
   if (popKey) closePop();

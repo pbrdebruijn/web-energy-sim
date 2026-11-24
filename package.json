@@ -7,7 +7,7 @@
     "test": "node test.js",
     "build": "esbuild card.js --bundle --minify --format=esm --target=es2020 --legal-comments=none --outfile=dist/energy-scene-card.js",
     "bench": "node bench.js",
-    "assets": "/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python blender/build_scene.py -- assets/scene.glb"
+    "assets": "/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python blender/build_scene.py -- dist/energy-scene.glb"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
